@@ -1,0 +1,148 @@
+import * as THREE from 'three';
+import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import type { StoryScript } from '../timeline/types';
+
+export interface AssetManifest {
+  models: string[];
+  audio: string[];
+  textures: string[];
+}
+
+export interface LoadProgress {
+  loaded: number;
+  total: number;
+  url: string;
+  failed: string[];
+}
+
+/**
+ * Carregador assíncrono com cache de GLTF/GLB, AudioBuffer e texturas.
+ * Falhas não interrompem a história: o recurso é marcado como ausente
+ * e o sistema consumidor usa seu fallback procedural.
+ */
+export class AssetLoader {
+  private readonly gltfLoader = new GLTFLoader();
+  private readonly textureLoader = new THREE.TextureLoader();
+  private readonly gltfCache = new Map<string, Promise<GLTF>>();
+  private readonly audioCache = new Map<string, Promise<AudioBuffer>>();
+  private readonly textureCache = new Map<string, Promise<THREE.Texture>>();
+  private readonly resolvedGltf = new Map<string, GLTF>();
+  private readonly resolvedAudio = new Map<string, AudioBuffer>();
+
+  constructor(
+    private readonly audioContext: BaseAudioContext,
+    private readonly baseUrl: string = import.meta.env.BASE_URL,
+  ) {}
+
+  /** Coleta todas as URLs externas referenciadas por um StoryScript. */
+  static manifestOf(script: StoryScript): AssetManifest {
+    const models = new Set<string>();
+    const audio = new Set<string>();
+    for (const p of script.scene?.props ?? []) if (p.prop === 'model' && p.model) models.add(p.model);
+    for (const ev of script.timeline ?? []) {
+      if (!ev || typeof ev !== 'object') continue;
+      if (ev.type === 'SPAWN_OBJECT' && ev.object) {
+        if (ev.object.kind === 'actor' && ev.object.model) models.add(ev.object.model);
+        if (ev.object.kind === 'prop' && ev.object.prop === 'model' && ev.object.model) models.add(ev.object.model);
+      } else if (ev.type === 'PLAY_AUDIO_WITH_LIPSYNC' && ev.audio) {
+        audio.add(ev.audio);
+      } else if (ev.type === 'PLAY_SOUND' && ev.src && !ev.src.startsWith('procedural:')) {
+        audio.add(ev.src);
+      }
+    }
+    return { models: [...models], audio: [...audio], textures: [] };
+  }
+
+  /** Carrega um manifesto inteiro em paralelo, reportando progresso. */
+  async preload(manifest: AssetManifest, onProgress?: (p: LoadProgress) => void): Promise<LoadProgress> {
+    const jobs: [string, () => Promise<unknown>][] = [
+      ...manifest.models.map((u): [string, () => Promise<unknown>] => [u, () => this.loadGLTF(u)]),
+      ...manifest.audio.map((u): [string, () => Promise<unknown>] => [u, () => this.loadAudio(u)]),
+      ...manifest.textures.map((u): [string, () => Promise<unknown>] => [u, () => this.loadTexture(u)]),
+    ];
+    const progress: LoadProgress = { loaded: 0, total: jobs.length, url: '', failed: [] };
+    onProgress?.({ ...progress });
+    await Promise.all(
+      jobs.map(async ([url, job]) => {
+        try {
+          await job();
+        } catch (err) {
+          progress.failed.push(url);
+          console.warn(`[AssetLoader] falha ao carregar '${url}' — usando fallback procedural.`, err);
+        } finally {
+          progress.loaded++;
+          progress.url = url;
+          onProgress?.({ ...progress, failed: [...progress.failed] });
+        }
+      }),
+    );
+    return progress;
+  }
+
+  loadGLTF(url: string): Promise<GLTF> {
+    let p = this.gltfCache.get(url);
+    if (!p) {
+      p = this.gltfLoader.loadAsync(this.resolve(url)).then((g) => {
+        this.resolvedGltf.set(url, g);
+        return g;
+      });
+      this.gltfCache.set(url, p);
+      p.catch(() => this.gltfCache.delete(url));
+    }
+    return p;
+  }
+
+  loadAudio(url: string): Promise<AudioBuffer> {
+    let p = this.audioCache.get(url);
+    if (!p) {
+      p = fetch(this.resolve(url))
+        .then((r) => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.arrayBuffer();
+        })
+        .then((data) => this.audioContext.decodeAudioData(data))
+        .then((buf) => {
+          this.resolvedAudio.set(url, buf);
+          return buf;
+        });
+      this.audioCache.set(url, p);
+      p.catch(() => this.audioCache.delete(url));
+    }
+    return p;
+  }
+
+  loadTexture(url: string): Promise<THREE.Texture> {
+    let p = this.textureCache.get(url);
+    if (!p) {
+      p = this.textureLoader.loadAsync(this.resolve(url)).then((t) => {
+        // Estética retrô: sem filtragem bilinear nem mipmaps.
+        t.magFilter = THREE.NearestFilter;
+        t.minFilter = THREE.NearestFilter;
+        t.generateMipmaps = false;
+        t.colorSpace = THREE.SRGBColorSpace;
+        return t;
+      });
+      this.textureCache.set(url, p);
+      p.catch(() => this.textureCache.delete(url));
+    }
+    return p;
+  }
+
+  /** Acesso síncrono a recursos já carregados (undefined se ausente/falhou). */
+  getGLTF(url: string | undefined): GLTF | undefined {
+    return url ? this.resolvedGltf.get(url) : undefined;
+  }
+
+  getAudio(url: string | undefined): AudioBuffer | undefined {
+    return url ? this.resolvedAudio.get(url) : undefined;
+  }
+
+  loadedAudio(): IterableIterator<[string, AudioBuffer]> {
+    return this.resolvedAudio.entries();
+  }
+
+  private resolve(url: string): string {
+    if (/^(https?:|data:|blob:|\/)/.test(url)) return url;
+    return `${this.baseUrl.replace(/\/?$/, '/')}${url.replace(/^\.\//, '')}`;
+  }
+}

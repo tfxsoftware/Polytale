@@ -1,0 +1,21 @@
+{
+  "name": "polytale",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Engine 3D de contação de histórias (diálogos, animação procedural, estética PS1/90s) em Vite + TypeScript + Three.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.180.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.0"
+  }
+}

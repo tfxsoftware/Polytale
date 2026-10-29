@@ -1,0 +1,328 @@
+import * as THREE from 'three';
+import type { CameraShotDef, CameraShotSpec, CameraValue, FrameState, PointRef, ShakeState } from '../timeline/types';
+import type { Actor } from '../core/Actor';
+import { DEG2RAD, fbm1D, noise1D } from '../utils/math';
+
+/** Fornece atores ao diretor (implementado pelo SceneManager). */
+export interface ActorProvider {
+  getActor(id: string): Actor | undefined;
+  visibleActors(): Actor[];
+}
+
+export interface CameraPose {
+  position: THREE.Vector3;
+  quaternion: THREE.Quaternion;
+  fov: number;
+}
+
+const DEFAULT_FOV = 50;
+const UP = new THREE.Vector3(0, 1, 0);
+
+/**
+ * Diretor de câmera.
+ *
+ * - Planos customizados (`cameras` do script) e presets dinâmicos
+ *   (wide, medium, close_up, over_shoulder, two_shot, low_angle) que
+ *   enquadram atores na posição atual deles.
+ * - Transições: posição por Lerp, orientação por Slerp (quaternions), FOV por Lerp.
+ *   Misturas aninhadas permitem interromper uma transição no meio.
+ * - CAMERA_SHAKE procedural com decaimento exponencial, determinístico no tempo
+ *   da timeline (o mesmo instante sempre produz o mesmo tremor).
+ */
+export class CameraDirector {
+  private readonly shots = new Map<string, CameraShotDef>();
+  private readonly tmpA = new THREE.Vector3();
+  private readonly tmpB = new THREE.Vector3();
+  private readonly tmpC = new THREE.Vector3();
+  private readonly lookMatrix = new THREE.Matrix4();
+  private readonly cameraPos = new THREE.Vector3();
+
+  constructor(
+    private readonly camera: THREE.PerspectiveCamera,
+    private readonly actors: ActorProvider,
+  ) {}
+
+  setShots(shots: Iterable<CameraShotDef>): void {
+    this.shots.clear();
+    for (const s of shots) this.shots.set(s.id, s);
+  }
+
+  /** Posição atual da câmera (útil como alvo de olhar 'camera'). */
+  getPosition(out: THREE.Vector3): THREE.Vector3 {
+    return out.copy(this.cameraPos);
+  }
+
+  setAspect(aspect: number): void {
+    this.camera.aspect = aspect;
+    this.camera.updateProjectionMatrix();
+  }
+
+  /** Aplica o plano/mistura do quadro + tremores. */
+  apply(frame: FrameState): void {
+    const pose = this.resolve(frame.camera, frame.time);
+    this.applyShake(pose, frame.shakes, frame.time);
+
+    this.camera.position.copy(pose.position);
+    this.camera.quaternion.copy(pose.quaternion);
+    if (Math.abs(this.camera.fov - pose.fov) > 1e-4) {
+      this.camera.fov = pose.fov;
+      this.camera.updateProjectionMatrix();
+    }
+    this.camera.updateMatrixWorld();
+    this.cameraPos.copy(pose.position);
+  }
+
+  /** Resolve recursivamente um CameraValue em pose (Lerp/Slerp entre planos). */
+  resolve(value: CameraValue, time: number): CameraPose {
+    if (value.kind === 'shot') return this.resolveSpec(value.spec, time);
+    const a = this.resolve(value.from, time);
+    const b = this.resolve(value.to, time);
+    const t = value.alpha;
+    return {
+      position: a.position.lerp(b.position, t),
+      quaternion: a.quaternion.slerp(b.quaternion, t),
+      fov: a.fov + (b.fov - a.fov) * t,
+    };
+  }
+
+  /* ---------------------------------------------------------------------- */
+
+  private resolveSpec(spec: CameraShotSpec, time: number): CameraPose {
+    let position: THREE.Vector3;
+    let target: THREE.Vector3;
+    let fov = DEFAULT_FOV;
+    let roll = 0;
+    let handheld = spec.handheld ?? 0;
+
+    const custom = spec.shot ? this.shots.get(spec.shot) : undefined;
+    if (custom) {
+      position = this.resolvePoint(custom.position, 'head');
+      target = this.resolvePoint(custom.lookAt, 'head');
+      fov = custom.fov ?? DEFAULT_FOV;
+      roll = (custom.roll ?? 0) * DEG2RAD;
+      handheld = spec.handheld ?? custom.handheld ?? 0;
+    } else {
+      const p = this.resolvePreset(spec);
+      position = p.position;
+      target = p.target;
+      fov = p.fov;
+    }
+    if (spec.fov !== undefined) fov = spec.fov;
+    if (spec.offset) position.add(this.tmpA.set(spec.offset[0], spec.offset[1], spec.offset[2]));
+
+    // "Câmera na mão": deriva lenta e determinística.
+    if (handheld > 0) {
+      const h = handheld * 0.06;
+      target.x += fbm1D(time * 0.35, 3) * h;
+      target.y += fbm1D(time * 0.3, 7) * h * 0.6;
+      position.x += fbm1D(time * 0.25, 11) * h * 0.5;
+      position.y += fbm1D(time * 0.28, 13) * h * 0.4;
+    }
+
+    const quaternion = this.lookQuaternion(position, target, roll);
+    return { position, quaternion, fov };
+  }
+
+  private lookQuaternion(position: THREE.Vector3, target: THREE.Vector3, roll: number): THREE.Quaternion {
+    if (position.distanceToSquared(target) < 1e-8) target = target.clone().add(new THREE.Vector3(0, 0, -1));
+    this.lookMatrix.lookAt(position, target, UP);
+    const q = new THREE.Quaternion().setFromRotationMatrix(this.lookMatrix);
+    if (roll) q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), roll));
+    return q;
+  }
+
+  private resolvePoint(ref: PointRef, defaultAnchor: 'head' | 'chest' | 'root'): THREE.Vector3 {
+    if (Array.isArray(ref)) return new THREE.Vector3(ref[0], ref[1], ref[2]);
+    const actor = this.actors.getActor(ref.actor);
+    const out = new THREE.Vector3();
+    if (!actor) return out;
+    const anchor = ref.anchor ?? defaultAnchor;
+    if (anchor === 'head') actor.getHeadWorldPosition(out);
+    else if (anchor === 'chest') actor.getChestWorldPosition(out);
+    else out.copy(actor.root.position);
+    if (ref.offset) {
+      const off = this.tmpA.set(ref.offset[0], ref.offset[1], ref.offset[2]);
+      if (ref.local) off.applyQuaternion(actor.root.quaternion);
+      out.add(off);
+    }
+    return out;
+  }
+
+  /** Presets cinematográficos calculados a partir dos atores. */
+  private resolvePreset(spec: CameraShotSpec): { position: THREE.Vector3; target: THREE.Vector3; fov: number } {
+    const preset = spec.preset ?? 'wide';
+    const subject = spec.subject ? this.actors.getActor(spec.subject) : undefined;
+    const other = spec.over ? this.actors.getActor(spec.over) : this.nearestOther(subject);
+    const sideSign = spec.side === 'left' ? -1 : 1;
+
+    switch (preset) {
+      case 'close_up':
+      case 'medium': {
+        if (!subject) return this.wide(spec);
+        const close = preset === 'close_up';
+        const head = subject.getHeadWorldPosition(new THREE.Vector3());
+        // Mira abaixo do rosto: a cabeça fica no terço superior (espaço para legendas).
+        const target = head.clone().add(new THREE.Vector3(0, close ? -0.2 : -0.55, 0));
+        const position = this.clearOrbit(subject, head, close ? 1.7 : 2.9, sideSign, close ? -0.08 : -0.15);
+        return { position, target, fov: close ? 35 : 40 };
+      }
+      case 'over_shoulder': {
+        if (!subject) return this.wide(spec);
+        const target = subject.getHeadWorldPosition(new THREE.Vector3());
+        if (!other) {
+          const fwd = subject.getForward(this.tmpB);
+          return { position: target.clone().addScaledVector(fwd, 2.2).add(new THREE.Vector3(0, 0.2, 0)), target, fov: 40 };
+        }
+        const shoulder = other.getHeadWorldPosition(new THREE.Vector3());
+        const toSubject = this.tmpB.subVectors(target, shoulder).setY(0);
+        const sep = Math.max(0.3, toSubject.length());
+        toSubject.normalize();
+        const right = this.tmpC.crossVectors(toSubject, UP).normalize();
+        // A linha câmera->sujeito converge; para a cabeça de `over` ficar na borda do
+        // quadro (~0.42 m da linha), o deslocamento lateral cresce quando estão próximos.
+        const back = 0.9;
+        const lateral = THREE.MathUtils.clamp((0.42 * (sep + back)) / sep, 0.5, 1.4);
+        const position = shoulder
+          .clone()
+          .addScaledVector(toSubject, -back)
+          .addScaledVector(right, sideSign * lateral)
+          .add(new THREE.Vector3(0, 0.12, 0));
+        return { position, target: target.clone().addScaledVector(right, sideSign * -0.1), fov: 40 };
+      }
+      case 'two_shot': {
+        const a = subject ?? this.actors.visibleActors()[0];
+        const b = a ? (spec.over ? other : this.nearestOther(a)) : undefined;
+        if (!a || !b) return this.wide(spec);
+        const pa = a.getChestWorldPosition(new THREE.Vector3());
+        const pb = b.getChestWorldPosition(new THREE.Vector3());
+        const mid = pa.clone().add(pb).multiplyScalar(0.5);
+        const axis = this.tmpB.subVectors(pb, pa).setY(0);
+        const span = Math.max(0.8, axis.length());
+        axis.normalize();
+        const perp = this.tmpC.crossVectors(UP, axis).normalize();
+        // Lado da câmera: aquele para onde os atores (em média) estão voltados.
+        // Se eles se encaram (soma ~0), usa +Z do mundo como referência.
+        const facing = a.getForward(new THREE.Vector3()).add(b.getForward(new THREE.Vector3()));
+        const ref = facing.lengthSq() > 0.04 ? facing : new THREE.Vector3(0, 0, 1);
+        if (ref.dot(perp) < 0) perp.negate();
+        if (spec.side === 'left') perp.negate();
+        const dist = span * 1.25 + 1.6;
+        const position = mid.clone().addScaledVector(perp, dist).add(new THREE.Vector3(0, 0.25, 0));
+        return { position, target: mid.add(new THREE.Vector3(0, 0.1, 0)), fov: 45 };
+      }
+      case 'low_angle': {
+        if (!subject) return this.wide(spec);
+        const head = subject.getHeadWorldPosition(new THREE.Vector3());
+        const root = subject.root.position.clone();
+        const position = this.clearOrbit(subject, root, 1.85, sideSign, 0.35);
+        return { position, target: head.add(new THREE.Vector3(0, 0.1, 0)), fov: 48 };
+      }
+      case 'wide':
+      default:
+        return this.wide(spec);
+    }
+  }
+
+  /**
+   * Posição de câmera orbitando à frente do sujeito, desviando de oclusão:
+   * testa ângulos crescentes (lado preferido primeiro) até a linha de visão
+   * até o rosto não passar por outro ator. Determinístico (só depende das posições).
+   */
+  private clearOrbit(subject: Actor, anchor: THREE.Vector3, dist: number, sideSign: number, yOffset: number): THREE.Vector3 {
+    const fwd = subject.getForward(new THREE.Vector3());
+    const right = new THREE.Vector3().crossVectors(fwd, UP).normalize();
+    const face = subject.getHeadWorldPosition(new THREE.Vector3());
+    const others = this.actors.visibleActors().filter((a) => a !== subject);
+    const base = Math.atan(0.3);
+    const angles = [base, 0.6, 0.95, 1.3, -base, -0.6, -0.95, -1.3].map((a) => a * sideSign);
+
+    const candidate = (angle: number) =>
+      anchor
+        .clone()
+        .addScaledVector(fwd, Math.cos(angle) * dist)
+        .addScaledVector(right, Math.sin(angle) * dist)
+        .add(new THREE.Vector3(0, yOffset, 0));
+
+    const seg = new THREE.Line3();
+    const closest = new THREE.Vector3();
+    const probe = new THREE.Vector3();
+    const blocked = (cam: THREE.Vector3) => {
+      seg.set(cam, face);
+      for (const o of others) {
+        for (const p of [o.getHeadWorldPosition(probe).clone(), o.getChestWorldPosition(probe).clone()]) {
+          seg.closestPointToPoint(p, true, closest);
+          if (closest.distanceTo(p) < 0.32) return true;
+        }
+      }
+      return false;
+    };
+
+    for (const a of angles) {
+      const cam = candidate(a);
+      if (!blocked(cam)) return cam;
+    }
+    return candidate(angles[0]);
+  }
+
+  /** Plano geral: enquadra todos os atores visíveis (ou o sujeito). */
+  private wide(spec: CameraShotSpec): { position: THREE.Vector3; target: THREE.Vector3; fov: number } {
+    const subject = spec.subject ? this.actors.getActor(spec.subject) : undefined;
+    const group = subject ? [subject] : this.actors.visibleActors();
+    if (!group.length) return { position: new THREE.Vector3(0, 2.2, 8), target: new THREE.Vector3(0, 1, 0), fov: DEFAULT_FOV };
+
+    const center = new THREE.Vector3();
+    const facing = new THREE.Vector3();
+    for (const a of group) {
+      center.add(a.getChestWorldPosition(this.tmpA));
+      facing.add(a.getForward(this.tmpB));
+    }
+    center.divideScalar(group.length);
+    let radius = 1;
+    for (const a of group) radius = Math.max(radius, a.root.position.distanceTo(this.tmpA.set(center.x, a.root.position.y, center.z)) + 0.8);
+    if (facing.lengthSq() < 1e-4) facing.set(0, 0, 1);
+    facing.setY(0).normalize();
+    const right = this.tmpC.crossVectors(facing, UP).normalize();
+    const sideSign = spec.side === 'left' ? -1 : 1;
+    const dist = radius * 2.6 + 3;
+    const position = center
+      .clone()
+      .addScaledVector(facing, dist)
+      .addScaledVector(right, sideSign * dist * 0.3)
+      .add(new THREE.Vector3(0, 1.4 + radius * 0.3, 0));
+    return { position, target: center, fov: DEFAULT_FOV };
+  }
+
+  private nearestOther(subject: Actor | undefined): Actor | undefined {
+    if (!subject) return undefined;
+    let best: Actor | undefined;
+    let bestD = Infinity;
+    for (const a of this.actors.visibleActors()) {
+      if (a === subject) continue;
+      const d = a.root.position.distanceToSquared(subject.root.position);
+      if (d < bestD) {
+        bestD = d;
+        best = a;
+      }
+    }
+    return best;
+  }
+
+  /** CAMERA_SHAKE: amplitude = intensity * e^(-decay * t), ruído determinístico. */
+  private applyShake(pose: CameraPose, shakes: ShakeState[], time: number): void {
+    if (!shakes.length) return;
+    const rot = new THREE.Euler();
+    const offset = new THREE.Vector3();
+    for (const s of shakes) {
+      const amp = s.intensity * Math.exp(-s.decay * s.localTime);
+      if (amp < 1e-4) continue;
+      const x = time * s.frequency;
+      rot.x += noise1D(x, s.seed + 1) * amp * 0.05;
+      rot.y += noise1D(x, s.seed + 2) * amp * 0.05;
+      rot.z += noise1D(x, s.seed + 3) * amp * 0.03;
+      offset.x += noise1D(x, s.seed + 4) * amp * 0.06;
+      offset.y += noise1D(x, s.seed + 5) * amp * 0.06;
+    }
+    pose.position.add(offset.applyQuaternion(pose.quaternion));
+    pose.quaternion.multiply(new THREE.Quaternion().setFromEuler(rot));
+  }
+}

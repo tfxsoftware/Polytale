@@ -1,0 +1,207 @@
+# Polytale
+
+**A 3D storytelling engine with a PS1 / late-90s look.** You describe a scene as JSON (a
+*StoryScript*) and the engine handles the rest: low-poly characters with a life of their own,
+lip-synced dialogue with subtitles, camera direction, physical interactions between characters,
+and a retro shader with pixelation, dithering and scanlines.
+
+Built with **Vite + TypeScript + Three.js**. It needs no external assets: characters, scenery,
+voices and sounds can all be procedural.
+
+---
+
+## Highlights
+
+- **Declarative scripts**: a whole scene is a JSON document (`StoryScript`) of timed events.
+- **Reversible timeline**: scene state is computed as a function of time, so you can drag the
+  scrubber backwards and forwards freely.
+- **Living characters**: breathing, random blinking, eye saccades, automatic walk cycles, facial
+  expressions driven by *morph targets*, and gestures.
+- **Body & interactions**: poses (sit, kneel, arms crossed...), hands reaching targets via IK,
+  holding and handing over objects, and ready-made interactions (`handshake`, `hug`, `give`,
+  `pickUp`, `push`...).
+- **Lip-synced dialogue**: a 512-bin `AnalyserNode` (RMS energy drives `jawOpen`), a procedural
+  90s-game "babble" voice, a `speechSynthesis` fallback, and RPG-style subtitles.
+- **Camera direction**: presets (`wide`, `medium`, `close_up`, `over_shoulder`, `two_shot`,
+  `low_angle`) that track actors and avoid occlusion, lerp/slerp transitions, and camera shake
+  with exponential decay.
+- **PS1 visuals**: a GLSL shader with downscaling, 4x4 Bayer dithering, 15-bit color, scanlines and
+  CRT curvature, plus *vertex snapping* (the PlayStation vertex wobble).
+- **Built-in editor**: paste a StoryScript into the modal and apply it live, with detailed error
+  messages.
+- **LLM-ready**: [`skills.md`](./skills.md) teaches an AI to turn free-form scripts into valid
+  StoryScript (written in Portuguese).
+
+---
+
+## Getting started
+
+Requires **Node.js 20.19+** (or 22.12+).
+
+```bash
+npm install
+npm run dev        # dev server (http://localhost:5173)
+npm run build      # typecheck + production build into dist/
+npm run preview    # serve the build
+npm run typecheck  # TypeScript only
+```
+
+Open the page and click **PRESS START**. The click is needed for the browser to allow audio.
+The demo *A Chama Antiga* ("The Ancient Flame", 60 s, in Portuguese) starts playing.
+
+### Controls
+
+| Key | Action |
+|---|---|
+| `Space` | Play / pause |
+| `←` / `→` | Back / forward 1 s (`Shift`: 5 s) |
+| `Home` | Back to start |
+| `1`–`5` | Playback speed (0.25x – 2x) |
+| `R` | Toggle Retro FX |
+| `M` | Mute |
+| `E` | Open the StoryScript editor (`Ctrl+Enter` applies, `Esc` closes) |
+
+In the browser console, `window.narrative` exposes the engine, timeline, registry, scene and audio
+for debugging. Example: `narrative.timeline.seek(12)`.
+
+---
+
+## StoryScript in 30 seconds
+
+```json
+{
+  "meta": { "title": "First Meeting", "duration": 9 },
+  "timeline": [
+    { "time": 0, "type": "SPAWN_OBJECT", "target": "ana",
+      "object": { "kind": "actor", "name": "Ana", "voice": { "engine": "speech", "lang": "en-US" } },
+      "position": [-2, 0, 0], "rotation": [0, 90, 0] },
+    { "time": 0, "type": "SPAWN_OBJECT", "target": "leo",
+      "object": { "kind": "actor", "name": "Leo", "voice": { "engine": "babble", "pitch": 130 } },
+      "position": [2, 0, 0], "rotation": [0, -90, 0] },
+    { "time": 0, "type": "CAMERA_CUT", "preset": "wide" },
+    { "time": 0.5, "type": "INTERACT", "target": "ana", "interaction": "handshake", "with": "leo" },
+    { "time": 3.5, "type": "CAMERA_CUT", "preset": "close_up", "subject": "ana" },
+    { "time": 3.6, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "ana", "text": "Nice to meet you, I'm Ana!" },
+    { "time": 3.6, "type": "SET_EXPRESSION", "target": "ana", "expression": "happy" },
+    { "time": 7.0, "type": "FADE_SCREEN", "to": 1, "duration": 2 }
+  ]
+}
+```
+
+Open the editor (`E`), paste the JSON and apply it.
+
+### Action catalog
+
+| Group | Actions |
+|---|---|
+| Objects | `SPAWN_OBJECT`, `DESPAWN_OBJECT`, `TRANSFORM_OBJECT` |
+| Dialogue & sound | `PLAY_AUDIO_WITH_LIPSYNC`, `PLAY_SOUND` |
+| Camera | `CAMERA_CUT`, `CAMERA_TRANSITION`, `CAMERA_SHAKE` |
+| Acting | `SET_LOOK_TARGET`, `SET_EXPRESSION`, `PLAY_GESTURE`, `PLAY_ANIMATION` |
+| Body | `SET_POSE`, `REACH`, `ATTACH_OBJECT`, `DETACH_OBJECT`, `INTERACT` |
+| Light & effects | `SET_LIGHT`, `SET_RETRO_FX`, `FADE_SCREEN`, `FLASH_SCREEN` |
+
+The full reference (fields, accepted values, directing rules, and a dialogue timing guide of
+roughly 1 s per 12–15 characters) is in **[`skills.md`](./skills.md)**.
+
+### Generating scripts with AI
+
+Use `skills.md` as the *system prompt* of an LLM and send it a free-form script. It returns a
+StoryScript ready to paste into the editor.
+
+---
+
+## Architecture
+
+```
+Engine (loop, delta time)
+  └─ Timeline.update(dt) ─► time t
+       └─ ActionRegistry.evaluate(story, t) ─► FrameState (complete, pure scene state at t)
+            ├─ SceneManager.applyFrame ─► actors, props, lights
+            ├─ AudioLipsync.sync/update ─► audio sources aligned to t + FFT/RMS analysis
+            ├─ SceneManager.update ─► Actor.update(dt): breathing, blinking, gaze, pose, IK, morphs
+            ├─ CameraDirector.apply ─► shot / shot blend + shake
+            ├─ PostProcessing ─► RenderPass → OutputPass (ACES) → retro shader
+            └─ DialogueBox / ControlPanel
+```
+
+- **Compilation:** `ActionRegistry.compile()` validates the script, expands macros (`INTERACT`,
+  `REACH` with `hold`) and turns events into per-channel segments (`object:kael:position`,
+  `actor:iara:pose`...). Each segment's start value is sampled from its channel at the event's time,
+  so interruptions are smooth and seeking is deterministic.
+- **Evaluation:** `evaluate(t)` is a pure function. That's what makes the timeline reversible.
+- **Separation:** Timeline and ActionRegistry know nothing about Three.js, so all the logic can be
+  tested in Node without a GPU.
+
+### Project layout
+
+```
+src/
+├── config/defaultScript.ts      # "A Chama Antiga" demo
+├── core/
+│   ├── Engine.ts                # renderer (shadows + ACES), loop, resize, delta time
+│   ├── SceneManager.ts          # scenery, lights, props, actors, attachments, IK targets
+│   ├── Actor.ts                 # character: morphs, procedural life, poses, two-bone IK
+│   └── AssetLoader.ts           # cached GLTF, audio and texture loading
+├── timeline/
+│   ├── Timeline.ts              # master clock (play/pause/seek/rate/loop)
+│   ├── ActionRegistry.ts        # validation, compilation, easings and evaluation
+│   ├── poses.ts                 # pose presets and keyframed gestures
+│   ├── interactions.ts          # INTERACT macros
+│   └── types.ts                 # StoryScript and FrameState types
+├── systems/
+│   ├── CameraDirector.ts        # presets, transitions, occlusion avoidance, shake
+│   ├── AudioLipsync.ts          # Web Audio, AnalyserNode, procedural voice, speechSynthesis
+│   └── PostProcessing.ts        # EffectComposer + PS1 shader + vertex snapping
+├── ui/
+│   ├── ControlPanel.ts          # play/pause, scrubber with markers, Retro FX
+│   ├── TimelineEditor.ts        # JSON editing modal
+│   └── DialogueBox.ts           # typewriter-style subtitles
+├── utils/math.ts                # noise, deterministic PRNG, helpers
+└── main.ts                      # bootstrap and per-frame orchestration
+public/
+├── models/                      # .glb / .gltf
+└── audio/                       # .mp3 / .wav
+skills.md                        # LLM skill: free-form script → StoryScript
+```
+
+### Extending
+
+To add an action, register a handler. It can write to channels (`tracks`), create time windows
+(`interval`) or emit other events (`expand`):
+
+```ts
+registry.register('SET_LOOK_TARGET', { /* validate, tracks, interval, expand */ });
+```
+
+To type new actions, add the event to the `StoryEvent` union in `src/timeline/types.ts`.
+
+---
+
+## Custom assets
+
+- **Models:** put files in `public/models/` and set `"model": "models/hero.glb"` on the actor.
+  Morph targets with ARKit / Ready Player Me names (`jawOpen`, `eyeBlinkLeft`, `mouthSmile`...)
+  are supported, as are Mixamo-style bones for poses and IK.
+- **Audio:** put files in `public/audio/` and set `"audio": "audio/line01.mp3"` on a dialogue line.
+  The file's real duration is used on the timeline.
+- A missing asset doesn't break the story: the engine falls back to procedural content and shows a
+  notice in the panel.
+
+---
+
+## Known limitations
+
+- GLTF support is implemented but there's no test model in the repo yet. Poses and IK on external
+  skeletons are approximate.
+- Characters walk in straight lines (no obstacle avoidance) and bodies don't collide.
+- The `speechSynthesis` voice depends on the voices installed on the system and doesn't go through
+  the analyser (its lip sync is estimated from the text).
+- Dropped objects "fall" by interpolation, not physics. That's intentional, to keep the timeline
+  reversible.
+
+---
+
+## License
+
+TBD.
