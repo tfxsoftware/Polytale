@@ -113,6 +113,7 @@ Campos opcionais de `object` para atores procedurais:
 | Campo | Valores |
 |---|---|
 | `build` | `slim`, `average` (padrão), `athletic`, `heavy` |
+| `headShape` | `box` (padrão), `round` (bola facetada), `egg` (ovo alto), `bulb` (cérebro enorme, queixo fino), `pear` (pera), `cone` (cabeça pontuda), `can` (lata), `wide` (achatada e larga) |
 | `hair` | `short` (padrão), `long`, `ponytail`, `bun`, `spiky`, `mohawk`, `bald` |
 | `outfit` | `casual` (padrão), `robe` (túnica longa), `dress` (vestido) |
 | `accessories` | lista com `hat`, `wizardHat`, `cap`, `crown`, `glasses`, `beard`, `mustache`, `scarf`, `backpack`, `cape` |

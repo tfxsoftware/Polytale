@@ -268,6 +268,9 @@ export type BodyBuild = (typeof BODY_BUILDS)[number];
 export const HAIR_STYLES = ['short', 'long', 'ponytail', 'bun', 'spiky', 'mohawk', 'bald'] as const;
 export type HairStyle = (typeof HAIR_STYLES)[number];
 
+export const HEAD_SHAPES = ['box', 'round', 'egg', 'bulb', 'pear', 'cone', 'can', 'wide'] as const;
+export type HeadShape = (typeof HEAD_SHAPES)[number];
+
 export const OUTFITS = ['casual', 'robe', 'dress'] as const;
 export type Outfit = (typeof OUTFITS)[number];
 
@@ -320,6 +323,8 @@ export interface ActorObjectDef {
   height?: number;
   /** Tipo de corpo do personagem procedural. */
   build?: BodyBuild;
+  /** Formato da cabeça do personagem procedural. */
+  headShape?: HeadShape;
   hair?: HairStyle;
   outfit?: Outfit;
   accessories?: Accessory[];

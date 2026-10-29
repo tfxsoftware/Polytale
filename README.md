@@ -20,7 +20,7 @@ voices and sounds can all be procedural.
 - **Body & interactions**: poses (sit, kneel, arms crossed...), hands reaching targets via IK,
   holding and handing over objects, and ready-made interactions (`handshake`, `hug`, `give`,
   `pickUp`, `push`...).
-- **Character variety**: body builds, hair styles, outfits (robe, dress) and accessories (hats, glasses,
+- **Character variety**: body builds, head shapes (egg, bulb, cone, can...), hair styles, outfits (robe, dress) and accessories (hats, glasses,
   beard, scarf, backpack, a cape that sways as they walk).
 - **Chapters**: multi-scene stories with their own sets, fade transitions, title cards and a shared
   `cast`.

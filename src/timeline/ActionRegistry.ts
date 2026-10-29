@@ -3,6 +3,7 @@ import {
   BODY_BUILDS,
   BODY_PARTS,
   HAIR_STYLES,
+  HEAD_SHAPES,
   OUTFITS,
   CAMERA_PRESETS,
   SOCKETS,
@@ -387,6 +388,7 @@ function validateActorStyle(def: ActorObjectDef): string[] {
     if (value !== undefined && !list.includes(String(value))) errs.push(`'object.${field}' inválido (use ${list.join(', ')})`);
   };
   oneOf('build', def.build, BODY_BUILDS);
+  oneOf('headShape', def.headShape, HEAD_SHAPES);
   oneOf('hair', def.hair, HAIR_STYLES);
   oneOf('outfit', def.outfit, OUTFITS);
   if (def.accessories !== undefined) {

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Accessory, BodyBuild, HairStyle, Outfit } from '../timeline/types';
+import type { Accessory, BodyBuild, HairStyle, HeadShape, Outfit } from '../timeline/types';
 
 /**
  * Peças de visual do personagem procedural: proporções por tipo de corpo,
@@ -31,13 +31,103 @@ export function buildProportions(build: BodyBuild | undefined): BuildProportions
   return BUILDS[build ?? 'average'] ?? BUILDS.average;
 }
 
+/** Cabeça de referência (caixa 0.40 × 0.42 × 0.38): cabelo e chapéus são modelados sobre ela. */
+const REF_HALF_WIDTH = 0.2;
+const REF_HALF_HEIGHT = 0.21;
+const REF_FRONT = 0.19;
+
+export interface HeadGeometry {
+  /** Malha centrada na origem (centro da cabeça). */
+  geometry: THREE.BufferGeometry;
+  top: number;
+  bottom: number;
+  /** Maior z da superfície dentro do retângulo (x ± hw, y ± hh), em coordenadas da cabeça. */
+  surfaceZ(x: number, y: number, hw?: number, hh?: number): number;
+  /** Encaixes para cabelo/chapéus (topo) e barba (queixo): a cabeça de referência ajustada a este formato. */
+  crown: { y: number; scaleX: number; scaleZ: number };
+  jaw: { y: number; scaleX: number; scaleZ: number };
+}
+
+/** Sólido de revolução com uma face plana voltada para +Z. Perfil: pares [raio, y] de baixo para cima. */
+function lathe(profile: [number, number][], segments: number): THREE.BufferGeometry {
+  const points = profile.map(([r, y]) => new THREE.Vector2(r, y));
+  return new THREE.LatheGeometry(points, segments, Math.PI / segments);
+}
+
+function headGeometry(shape: HeadShape): THREE.BufferGeometry {
+  switch (shape) {
+    case 'box':
+      return new THREE.BoxGeometry(0.4, 0.42, 0.38);
+    case 'round':
+      return new THREE.IcosahedronGeometry(0.24, 1);
+    case 'egg':
+      return lathe([[0, -0.24], [0.13, -0.21], [0.2, -0.12], [0.215, 0], [0.205, 0.12], [0.17, 0.24], [0.1, 0.33], [0, 0.36]], 8);
+    case 'bulb':
+      return lathe([[0, -0.21], [0.09, -0.19], [0.14, -0.1], [0.19, 0.02], [0.215, 0.12], [0.29, 0.22], [0.31, 0.32], [0.26, 0.42], [0.14, 0.49], [0, 0.51]], 9);
+    case 'pear':
+      return lathe([[0, -0.24], [0.19, -0.23], [0.26, -0.13], [0.245, 0], [0.19, 0.12], [0.13, 0.2], [0.06, 0.25], [0, 0.26]], 7);
+    case 'cone':
+      return lathe([[0, -0.22], [0.19, -0.2], [0.22, -0.05], [0.19, 0.12], [0.11, 0.32], [0.04, 0.5], [0, 0.56]], 6);
+    case 'can':
+      return new THREE.CylinderGeometry(0.2, 0.22, 0.48, 7, 1, false, Math.PI / 7);
+    case 'wide':
+      return new THREE.SphereGeometry(0.22, 8, 5).scale(1.5, 0.82, 1);
+  }
+}
+
+export function createHeadGeometry(shape: HeadShape | undefined): HeadGeometry {
+  const geometry = headGeometry(shape ?? 'box') ?? headGeometry('box');
+  geometry.computeBoundingBox();
+  const bbox = geometry.boundingBox!;
+
+  // Sonda por raycast: funciona para qualquer formato sem conhecer a fórmula da superfície.
+  const probe = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+  probe.updateMatrixWorld();
+  const ray = new THREE.Raycaster();
+  const origin = new THREE.Vector3();
+  const dir = new THREE.Vector3();
+  const hitZ = (x: number, y: number) => {
+    ray.set(origin.set(x, y, bbox.max.z + 1), dir.set(0, 0, -1));
+    return ray.intersectObject(probe, false)[0]?.point.z ?? -Infinity;
+  };
+  const halfWidthAt = (y: number) => {
+    ray.set(origin.set(bbox.max.x + 1, y, 0), dir.set(-1, 0, 0));
+    return ray.intersectObject(probe, false)[0]?.point.x ?? REF_HALF_WIDTH;
+  };
+  const surfaceZ = (x: number, y: number, hw = 0, hh = 0) => {
+    let z = -Infinity;
+    for (const dx of [-hw, 0, hw]) for (const dy of [-hh, 0, hh]) z = Math.max(z, hitZ(x + dx, y + dy));
+    return Number.isFinite(z) ? z : bbox.max.z;
+  };
+  const fit = (y: number) => {
+    const front = surfaceZ(0, y);
+    return {
+      scaleX: THREE.MathUtils.clamp(halfWidthAt(y) / REF_HALF_WIDTH, 0.6, 1.6),
+      scaleZ: THREE.MathUtils.clamp(front / REF_FRONT, 0.6, 1.6),
+    };
+  };
+
+  return {
+    geometry,
+    top: bbox.max.y,
+    bottom: bbox.min.y,
+    surfaceZ,
+    crown: { y: bbox.max.y - REF_HALF_HEIGHT, ...fit(bbox.max.y - 0.12) },
+    jaw: { y: bbox.min.y + REF_HALF_HEIGHT, ...fit(bbox.min.y + 0.1) },
+  };
+}
+
 export interface StyleContext {
-  head: THREE.Object3D;
+  /** Cabeça de referência alinhada ao topo (cabelo, chapéus) e ao queixo (barba). */
+  crown: THREE.Object3D;
+  jaw: THREE.Object3D;
   face: THREE.Object3D;
+  /** Deslocamento em z (relativo ao plano do rosto) para um traço cobrir a superfície em (x ± hw, y ± hh). */
+  faceZ(x: number, y: number, hw: number, hh: number): number;
   neck: THREE.Object3D;
   chest: THREE.Object3D;
   hips: THREE.Object3D;
-  /** Centro da cabeça acima do pivô e posição (z) da face frontal. */
+  /** Centro da cabeça acima do pivô e posição (z) da face frontal — da cabeça de referência (crown/jaw). */
   headCenter: number;
   front: number;
   proportions: BuildProportions;
@@ -61,7 +151,7 @@ function at<T extends THREE.Object3D>(o: T, x: number, y: number, z: number): T 
 
 /** Cabelo preso à cabeça. */
 export function addHair(ctx: StyleContext, style: HairStyle | undefined): void {
-  const { head, part, headCenter: HC } = ctx;
+  const { crown: head, part, headCenter: HC } = ctx;
   const m = ctx.materials.hair;
   const cap = () => head.add(part(new THREE.BoxGeometry(0.43, 0.11, 0.41), m, HC + 0.2));
   const backShort = () => head.add(at(part(new THREE.BoxGeometry(0.43, 0.3, 0.08), m), 0, HC + 0.06, -0.175));
@@ -121,7 +211,7 @@ export function addOutfit(ctx: StyleContext, outfit: Outfit | undefined): void {
 
 /** Acessórios. Retorna a capa (se houver) para ser animada. */
 export function addAccessories(ctx: StyleContext, accessories: Accessory[] | undefined): { cape: THREE.Object3D | null } {
-  const { head, face, neck, chest, part, headCenter: HC, front: FRONT, proportions: pr } = ctx;
+  const { crown: head, jaw, face, neck, chest, part, headCenter: HC, front: FRONT, proportions: pr } = ctx;
   const { accent, metal, dark } = ctx.materials;
   let cape: THREE.Object3D | null = null;
 
@@ -156,23 +246,23 @@ export function addAccessories(ctx: StyleContext, accessories: Accessory[] | und
         const mat = ctx.faceMaterial('#1a1a1a', 4);
         for (const side of [1, -1]) {
           const frame = new THREE.Mesh(new THREE.RingGeometry(0.052, 0.064, 8), mat);
-          frame.position.set(side * 0.088, 0.035, 0.008);
+          frame.position.set(side * 0.088, 0.035, ctx.faceZ(side * 0.088, 0.035, 0.065, 0.07) + 0.008);
           face.add(frame);
         }
         const bridge = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 0.012), mat);
-        bridge.position.set(0, 0.045, 0.008);
+        bridge.position.set(0, 0.045, ctx.faceZ(0, 0.045, 0.025, 0.006) + 0.008);
         face.add(bridge);
         break;
       }
       case 'beard':
         // Abaixo da boca (que vai até ~HC-0.15 aberta) + queixo e costeletas.
-        head.add(at(part(new THREE.BoxGeometry(0.36, 0.08, 0.08), ctx.materials.hair), 0, HC - 0.2, FRONT - 0.01));
-        head.add(at(part(new THREE.BoxGeometry(0.22, 0.09, 0.07), ctx.materials.hair), 0, HC - 0.27, FRONT - 0.03));
-        for (const side of [1, -1]) head.add(at(part(new THREE.BoxGeometry(0.05, 0.2, 0.12), ctx.materials.hair), side * 0.19, HC - 0.1, FRONT - 0.06));
+        jaw.add(at(part(new THREE.BoxGeometry(0.36, 0.08, 0.08), ctx.materials.hair), 0, HC - 0.2, FRONT - 0.01));
+        jaw.add(at(part(new THREE.BoxGeometry(0.22, 0.09, 0.07), ctx.materials.hair), 0, HC - 0.27, FRONT - 0.03));
+        for (const side of [1, -1]) jaw.add(at(part(new THREE.BoxGeometry(0.05, 0.2, 0.12), ctx.materials.hair), side * 0.19, HC - 0.1, FRONT - 0.06));
         break;
       case 'mustache': {
         const m = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.03), ctx.faceMaterial((ctx.materials.hair as THREE.MeshLambertMaterial).color, 4));
-        m.position.set(0, -0.07, 0.007);
+        m.position.set(0, -0.07, ctx.faceZ(0, -0.07, 0.08, 0.015) + 0.007);
         face.add(m);
         break;
       }

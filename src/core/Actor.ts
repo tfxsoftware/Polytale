@@ -16,7 +16,7 @@ import {
   type Socket,
 } from '../timeline/types';
 import { restPoseFrame, sampleGesture } from '../timeline/poses';
-import { addAccessories, addHair, addOutfit, buildProportions } from './CharacterStyle';
+import { addAccessories, addHair, addOutfit, buildProportions, createHeadGeometry } from './CharacterStyle';
 import type { LipsyncState } from '../systems/AudioLipsync';
 import { applyPS1VertexSnap } from '../systems/PostProcessing';
 import { DEG2RAD, clamp, clamp01, damp, fbm1D, hashString, lerp, seededRandom, smoothstep } from '../utils/math';
@@ -418,11 +418,14 @@ function buildProceduralRig(def: ActorObjectDef): ProceduralRig {
   head.position.y = 0.07;
   neck.add(head);
   const HC = 0.21; // centro da cabeça acima do pivô
-  const FRONT = 0.19; // face frontal (z)
-  head.add(part(new THREE.BoxGeometry(0.4, 0.42, 0.38), mSkin, HC));
+  const shape = createHeadGeometry(def.headShape);
+  const FRONT = shape.surfaceZ(0, 0); // face frontal (z)
+  /** z (relativo ao rosto) que deixa um traço por cima da superfície em (x ± hw, y ± hh). */
+  const faceZ = (x: number, y: number, hw: number, hh: number) => shape.surfaceZ(x, y, hw, hh) - FRONT;
+  head.add(part(shape.geometry, mSkin, HC));
   // Nariz
   const nose = part(new THREE.BoxGeometry(0.04, 0.06, 0.035), mSkin, HC - 0.03);
-  nose.position.z = FRONT + 0.015;
+  nose.position.z = shape.surfaceZ(0, -0.03, 0.02, 0.03) + 0.015;
   head.add(nose);
 
   const headCenter = new THREE.Object3D();
@@ -438,8 +441,10 @@ function buildProceduralRig(def: ActorObjectDef): ProceduralRig {
   const pupils: THREE.Object3D[] = [];
   const lidColor = skin.clone().multiplyScalar(0.82);
   for (const side of [1, -1] as const) {
+    // Olho + pálpebra (que cobre de -0.056 a +0.07 em torno do olho) ficam por cima da superfície.
+    const eyeZ = faceZ(side * 0.088, 0.035, 0.065, 0.07);
     const eye = new THREE.Group();
-    eye.position.set(side * 0.088, 0.035, 0.002);
+    eye.position.set(side * 0.088, 0.035, eyeZ + 0.002);
     face.add(eye);
     eye.add(new THREE.Mesh(new THREE.CircleGeometry(0.05, 10), faceMaterial('#f4f1e8', 1)));
     const pupil = new THREE.Mesh(new THREE.CircleGeometry(0.024, 8), faceMaterial(p.eyes ?? '#1d1a2a', 2));
@@ -449,30 +454,40 @@ function buildProceduralRig(def: ActorObjectDef): ProceduralRig {
     pupils.push(pupil);
 
     const lid = new THREE.Mesh(createEyelidGeometry(), faceMaterial(lidColor, 3));
-    lid.position.set(side * 0.088, 0.035, 0.004);
+    lid.position.set(side * 0.088, 0.035, eyeZ + 0.004);
     lid.name = 'eyelid';
     face.add(lid);
 
     const brow = new THREE.Mesh(createBrowGeometry(side), faceMaterial(p.hair ?? '#3b2a1a', 3));
-    brow.position.set(side * 0.088, 0.115, 0.004);
+    brow.position.set(side * 0.088, 0.115, faceZ(side * 0.088, 0.115, 0.05, 0.035) + 0.004);
     brow.rotation.z = side * -0.06;
     face.add(brow);
   }
 
   const mouth = new THREE.Mesh(createMouthGeometry(), faceMaterial('#4a1218', 2));
-  mouth.position.set(0, -0.105, 0.003);
+  // Aberta, a boca desce até ~-0.2 e alarga até ±0.09.
+  mouth.position.set(0, -0.105, faceZ(0, -0.13, 0.09, 0.07) + 0.003);
   mouth.name = 'mouth';
   face.add(mouth);
 
   // Visual: cabelo, roupa e acessórios.
+  const fitted = (fit: { y: number; scaleX: number; scaleZ: number }) => {
+    const g = new THREE.Group();
+    g.position.y = fit.y;
+    g.scale.set(fit.scaleX, 1, fit.scaleZ);
+    head.add(g);
+    return g;
+  };
   const style = {
-    head,
+    crown: fitted(shape.crown),
+    jaw: fitted(shape.jaw),
     face,
+    faceZ,
     neck,
     chest,
     hips,
     headCenter: HC,
-    front: FRONT,
+    front: 0.19,
     proportions: pr,
     materials: { hair: mHair, shirt: mShirt, accent: mAccent, accentDouble: mAccentDouble, metal: lambert('#d4a93a'), dark: lambert('#2a2420') },
     part: (geo: THREE.BufferGeometry, mat: THREE.Material, y = 0) => part(geo, mat, y),
@@ -485,7 +500,7 @@ function buildProceduralRig(def: ActorObjectDef): ProceduralRig {
   const sockets: Record<Socket, THREE.Object3D> = {
     handL,
     handR,
-    head: socket(head, 'head', 0, HC + 0.26, 0),
+    head: socket(head, 'head', 0, HC + shape.top + 0.05, 0),
     back: socket(chest, 'back', 0, 0.3, -0.2),
     chest: socket(chest, 'chest', 0, 0.3, 0.2),
   };
