@@ -84,6 +84,17 @@
         },
         "watermark": {
           "$ref": "#/definitions/WatermarkDef"
+        },
+        "autoCamera": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/AutoCameraDef"
+            }
+          ],
+          "description": "Cobertura automática de câmera para todo capítulo que não definir a sua própria."
         }
       },
       "required": [
@@ -137,6 +148,21 @@
         "bottom-right",
         "center"
       ]
+    },
+    "AutoCameraDef": {
+      "type": "object",
+      "properties": {
+        "maxShotSeconds": {
+          "type": "number",
+          "description": "Divide falas mais longas que isto (s) com um corte de reação no meio. Padrão 4."
+        },
+        "wideEvery": {
+          "type": "number",
+          "description": "A cada quantas falas um plano geral reestabelece a cena. 0 = nunca. Padrão 4."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Cobertura automática: gera `CAMERA_CUT`s a partir das falas (`PLAY_AUDIO_WITH_LIPSYNC`) — plano do ator que fala, plano reação de quem escuta, e um plano geral de tempos em tempos. Eventos de câmera explícitos no roteiro sempre têm prioridade (nenhum corte é gerado perto deles). `true` usa os padrões."
     },
     "SubtitleDef": {
       "type": "object",
@@ -385,6 +411,9 @@
           "type": "string",
           "description": "Apenas para prop = 'model'."
         },
+        "particles": {
+          "$ref": "#/definitions/ParticlesDef"
+        },
         "position": {
           "$ref": "#/definitions/Vec3"
         },
@@ -424,7 +453,34 @@
         "orb",
         "book",
         "cup",
-        "model"
+        "model",
+        "particles"
+      ]
+    },
+    "ParticlesDef": {
+      "type": "object",
+      "properties": {
+        "preset": {
+          "$ref": "#/definitions/ParticlePreset"
+        },
+        "count": {
+          "type": "number",
+          "description": "Número de partículas. Padrão depende do preset."
+        }
+      },
+      "required": [
+        "preset"
+      ],
+      "additionalProperties": false,
+      "description": "Apenas para prop = 'particles'. Determinístico por seed e tempo: o seek permanece reversível."
+    },
+    "ParticlePreset": {
+      "type": "string",
+      "enum": [
+        "steam",
+        "smoke",
+        "dust",
+        "sparks"
       ]
     },
     "RoomDef": {
@@ -806,6 +862,10 @@
         "accent": {
           "type": "string",
           "description": "Cor de acessórios (chapéu, capa, cachecol, mochila...)."
+        },
+        "faceTexture": {
+          "type": "string",
+          "description": "URL de uma imagem (PNG com transparência) pintada sobre o rosto procedural (sobrancelhas, barba por fazer, dentes...), sem precisar de um modelo GLTF completo. Fica atrás dos olhos/boca procedurais, que continuam animando."
         }
       },
       "additionalProperties": false
@@ -934,6 +994,9 @@
         "model": {
           "type": "string",
           "description": "Apenas para prop = 'model'."
+        },
+        "particles": {
+          "$ref": "#/definitions/ParticlesDef"
         },
         "kind": {
           "type": "string",
@@ -2356,6 +2419,17 @@
         "showTitle": {
           "type": "boolean",
           "description": "Cartela com o título no início do capítulo (padrão true)."
+        },
+        "autoCamera": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/AutoCameraDef"
+            }
+          ],
+          "description": "Cobertura automática de câmera; se omitido, herda de `meta.autoCamera`."
         }
       },
       "required": [

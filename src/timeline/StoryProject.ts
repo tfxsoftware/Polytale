@@ -63,7 +63,7 @@ export function chapterScripts(script: StoryScript): { def: ChapterDef; script: 
   return script.chapters.map((def) => ({
     def,
     script: {
-      meta: { title: def.title, duration: def.duration },
+      meta: { title: def.title, duration: def.duration, autoCamera: def.autoCamera ?? script.meta.autoCamera },
       scene: def.scene ?? script.scene,
       fx: def.fx ?? script.fx,
       cameras: def.cameras ?? script.cameras,
@@ -82,6 +82,7 @@ function validateProjectStructure(raw: unknown): string[] {
     errs.push(`'meta.aspect' inválido (use ${ASPECT_RATIOS.join(', ')})`);
   }
   if (isObj(raw.meta) && raw.meta.watermark !== undefined) errs.push(...validateWatermark(raw.meta.watermark));
+  if (isObj(raw.meta) && raw.meta.autoCamera !== undefined) errs.push(...validateAutoCamera(raw.meta.autoCamera, `meta.autoCamera`));
   const hasTimeline = Array.isArray(raw.timeline);
   const hasChapters = Array.isArray(raw.chapters);
   if (!hasTimeline && !hasChapters) errs.push(`informe 'timeline' (cena única) ou 'chapters' (capítulos)`);
@@ -94,6 +95,7 @@ function validateProjectStructure(raw: unknown): string[] {
       if (typeof c.title !== 'string') errs.push(`chapters[${i}]: 'title' é obrigatório`);
       if (!Array.isArray(c.timeline)) errs.push(`chapters[${i}]: 'timeline' deve ser um array`);
       if (c.transition !== undefined && c.transition !== 'fade' && c.transition !== 'cut') errs.push(`chapters[${i}]: 'transition' deve ser 'fade' ou 'cut'`);
+      if (c.autoCamera !== undefined) errs.push(...validateAutoCamera(c.autoCamera, `chapters[${i}].autoCamera`));
     });
   }
   if (raw.subtitles !== undefined) errs.push(...validateSubtitles(raw.subtitles));
@@ -140,6 +142,19 @@ function validateWatermark(w: unknown): string[] {
   }
   if (w.opacity !== undefined && (typeof w.opacity !== 'number' || w.opacity < 0 || w.opacity > 1)) errs.push(`'meta.watermark.opacity' deve ser um número entre 0 e 1`);
   if (w.size !== undefined && (typeof w.size !== 'number' || !(w.size > 0))) errs.push(`'meta.watermark.size' deve ser um número > 0`);
+  return errs;
+}
+
+function validateAutoCamera(a: unknown, field: string): string[] {
+  if (typeof a === 'boolean') return [];
+  if (!isObj(a)) return [`'${field}' deve ser true/false ou um objeto { maxShotSeconds?, wideEvery? }`];
+  const errs: string[] = [];
+  if (a.maxShotSeconds !== undefined && (typeof a.maxShotSeconds !== 'number' || !(a.maxShotSeconds > 0))) {
+    errs.push(`'${field}.maxShotSeconds' deve ser um número > 0`);
+  }
+  if (a.wideEvery !== undefined && (typeof a.wideEvery !== 'number' || a.wideEvery < 0)) {
+    errs.push(`'${field}.wideEvery' deve ser um número >= 0`);
+  }
   return errs;
 }
 

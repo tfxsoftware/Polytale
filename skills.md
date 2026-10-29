@@ -97,11 +97,16 @@ expressões, gestos, olhares e efeitos — sempre a serviço da clareza da hist�
 ### 3.3 Props (cenografia)
 
 `prop`: `tree`, `pine`, `rock`, `crate`, `campfire`, `pillar`, `lamp`, `stool` (banco, assento a 0,45 m),
-`orb` (orbe luminoso), `book`, `cup`, `model` (GLTF via `"model": "models/arquivo.glb"`).
+`orb` (orbe luminoso), `book`, `cup`, `model` (GLTF via `"model": "models/arquivo.glb"`), `particles`.
 
 Objetos **manipuláveis** (pegar, entregar, largar) devem ser props pequenos (`orb`, `book`, `cup`) criados por
 `SPAWN_OBJECT`. A origem de `orb`/`book`/`cup` é o centro do objeto: no chão use `y` ≈ 0,09 (orb), 0,02 (book), 0,05 (cup);
 sobre uma mesa (`table`, tampo a 0,78 m) use `y` ≈ 0,8.
+
+`prop: "particles"` com `particles: { "preset": "steam" | "smoke" | "dust" | "sparks", "count"? }` — sobe/deriva de forma
+determinística (seed + tempo, o seek continua reversível). Ex.: `{ "prop": "particles", "particles": { "preset": "steam" },
+"position": [0, 0.1, -1.2] }` perto de uma `campfire`, ou `"smoke"` saindo de uma chaminé. `color` sobrescreve a cor do
+preset.
 
 **Mobília (interiores):** `table` (1,2 × 0,7 m, tampo a 0,78 m), `chair` (assento a 0,47 m, encosto em −Z local:
 gire 180° para quem senta olhar para −Z), `bookshelf` (1,0 × 1,9 m), `bed` (1,05 × 2,05 m), `rug` (2 × 1,4 m),
@@ -119,6 +124,7 @@ Campos opcionais de `object` para atores procedurais:
 | `outfit` | `casual` (padrão), `robe` (túnica longa), `dress` (vestido) |
 | `accessories` | lista com `hat`, `wizardHat`, `cap`, `crown`, `glasses`, `beard`, `mustache`, `scarf`, `backpack`, `cape` |
 | `palette.accent` | cor de chapéu, capa, cachecol e mochila |
+| `palette.faceTexture` | URL de uma imagem (PNG com transparência) pintada sobre o rosto procedural — sobrancelhas, barba por fazer, marcas — sem precisar de um modelo GLTF. Fica atrás dos olhos/boca procedurais, que continuam animando por cima. |
 
 Dê a cada personagem uma silhueta própria (cabelo + acessório + cor). A capa balança sozinha ao caminhar.
 
@@ -301,6 +307,13 @@ Campos comuns a **todos** os eventos:
   mais próximos entre si.
 - Planos customizados (`cameras[]`): `position`/`lookAt` aceitam `[x,y,z]` ou
   `{ "actor": "kael", "offset": [0, 0.2, 1.5], "local": true, "anchor": "head" }`.
+- `meta.autoCamera` (ou por capítulo): cobertura automática — gera um `CAMERA_CUT` por
+  `PLAY_AUDIO_WITH_LIPSYNC`, variando entre `close_up` de quem fala, reação de quem escuta e
+  `over_shoulder`, com um `wide` a cada `wideEvery` falas (padrão 4) e um corte de reação no meio de
+  falas mais longas que `maxShotSeconds` (padrão 4). **Nunca** sobrepõe um `CAMERA_CUT`/`CAMERA_TRANSITION`
+  que você já colocou perto do mesmo instante — útil para um primeiro rascunho rápido ou cenas sem
+  direção de câmera própria; `true` usa os padrões, ou `{ "wideEvery": 6, "maxShotSeconds": 5 }` para
+  ajustar.
 
 ### 4.6 `CAMERA_SHAKE` — tremor
 

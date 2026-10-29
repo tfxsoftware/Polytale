@@ -120,3 +120,111 @@ describe('validação', () => {
     expect(errors.every((e) => e.startsWith('capítulo 1 (Um): '))).toBe(true);
   });
 });
+
+describe('cobertura automática de câmera (meta.autoCamera)', () => {
+  const registry = new ActionRegistry();
+
+  function cameraAt(project: CompiledProject, t: number) {
+    const v = evaluateProject(registry, project, t).frame.camera;
+    if (v.kind !== 'shot') throw new Error('esperava um plano único, não uma mistura');
+    return v.spec;
+  }
+
+  it('gera um close_up para uma fala sem ouvinte', () => {
+    const script = {
+      meta: { title: 'x', autoCamera: true },
+      cast: { a: { kind: 'actor', name: 'A' } },
+      timeline: [
+        { time: 0, type: 'SPAWN_OBJECT', target: 'a', position: [0, 0, 0] },
+        { time: 1, type: 'PLAY_AUDIO_WITH_LIPSYNC', target: 'a', text: 'Oi' },
+      ],
+    };
+    const project = compileProject(registry, script);
+    const spec = cameraAt(project, 1);
+    expect(spec.preset).toBe('close_up');
+    expect(spec.subject).toBe('a');
+  });
+
+  it('varia entre falante, reação e sobre-o-ombro quando há outro ator', () => {
+    const script = {
+      meta: { title: 'x', autoCamera: { wideEvery: 0 } },
+      cast: { a: { kind: 'actor', name: 'A' }, b: { kind: 'actor', name: 'B' } },
+      timeline: [
+        { time: 0, type: 'SPAWN_OBJECT', target: 'a', position: [-1, 0, 0] },
+        { time: 0, type: 'SPAWN_OBJECT', target: 'b', position: [1, 0, 0] },
+        { time: 1, type: 'PLAY_AUDIO_WITH_LIPSYNC', target: 'a', text: 'Um', duration: 0.5 },
+        { time: 2, type: 'PLAY_AUDIO_WITH_LIPSYNC', target: 'a', text: 'Dois', duration: 0.5 },
+        { time: 3, type: 'PLAY_AUDIO_WITH_LIPSYNC', target: 'a', text: 'Três', duration: 0.5 },
+      ],
+    };
+    const project = compileProject(registry, script);
+    expect(cameraAt(project, 1).preset).toBe('close_up');
+    const reaction = cameraAt(project, 2);
+    expect(reaction.preset).toBe('medium');
+    expect(reaction.subject).toBe('b');
+    const overShoulder = cameraAt(project, 3);
+    expect(overShoulder.preset).toBe('over_shoulder');
+    expect(overShoulder.subject).toBe('a');
+    expect(overShoulder.over).toBe('b');
+  });
+
+  it('eventos de câmera escritos à mão vencem os gerados', () => {
+    const script = {
+      meta: { title: 'x', autoCamera: true },
+      cast: { a: { kind: 'actor', name: 'A' } },
+      timeline: [
+        { time: 0, type: 'SPAWN_OBJECT', target: 'a', position: [0, 0, 0] },
+        { time: 1, type: 'CAMERA_CUT', preset: 'wide' },
+        { time: 1, type: 'PLAY_AUDIO_WITH_LIPSYNC', target: 'a', text: 'Oi' },
+      ],
+    };
+    const project = compileProject(registry, script);
+    expect(cameraAt(project, 1).preset).toBe('wide');
+  });
+
+  it('divide falas longas com um corte de reação no meio', () => {
+    const script = {
+      meta: { title: 'x', autoCamera: { maxShotSeconds: 1 } },
+      cast: { a: { kind: 'actor', name: 'A' }, b: { kind: 'actor', name: 'B' } },
+      timeline: [
+        { time: 0, type: 'SPAWN_OBJECT', target: 'a', position: [-1, 0, 0] },
+        { time: 0, type: 'SPAWN_OBJECT', target: 'b', position: [1, 0, 0] },
+        { time: 1, type: 'PLAY_AUDIO_WITH_LIPSYNC', target: 'a', text: 'Uma fala bem longa', duration: 3 },
+      ],
+    };
+    const project = compileProject(registry, script);
+    expect(cameraAt(project, 1).preset).toBe('close_up');
+    const mid = cameraAt(project, 2);
+    expect(mid.preset).toBe('medium');
+    expect(mid.subject).toBe('b');
+  });
+
+  it('plano geral a cada N falas (wideEvery)', () => {
+    const script = {
+      meta: { title: 'x', autoCamera: { wideEvery: 2 } },
+      cast: { a: { kind: 'actor', name: 'A' } },
+      timeline: [
+        { time: 0, type: 'SPAWN_OBJECT', target: 'a', position: [0, 0, 0] },
+        { time: 1, type: 'PLAY_AUDIO_WITH_LIPSYNC', target: 'a', text: 'Um', duration: 0.3 },
+        { time: 2, type: 'PLAY_AUDIO_WITH_LIPSYNC', target: 'a', text: 'Dois', duration: 0.3 },
+        { time: 3, type: 'PLAY_AUDIO_WITH_LIPSYNC', target: 'a', text: 'Três', duration: 0.3 },
+      ],
+    };
+    const project = compileProject(registry, script);
+    expect(cameraAt(project, 1).preset).toBe('close_up');
+    expect(cameraAt(project, 3).preset).toBe('wide');
+  });
+
+  it('desligado por padrão: a câmera não muda sozinha', () => {
+    const script = {
+      meta: { title: 'x' },
+      cast: { a: { kind: 'actor', name: 'A' } },
+      timeline: [
+        { time: 0, type: 'SPAWN_OBJECT', target: 'a', position: [0, 0, 0] },
+        { time: 1, type: 'PLAY_AUDIO_WITH_LIPSYNC', target: 'a', text: 'Oi' },
+      ],
+    };
+    const project = compileProject(registry, script);
+    expect(cameraAt(project, 1).preset).toBe('wide');
+  });
+});

@@ -14,6 +14,7 @@ import {
   type Socket,
 } from '../timeline/types';
 import { restPoseFrame, sampleGesture } from '../timeline/poses';
+import type { AssetLoader } from './AssetLoader';
 import type { LipsyncState } from '../systems/AudioLipsync';
 import { DEG2RAD, clamp, clamp01, damp, fbm1D, hashString, lerp, seededRandom, smoothstep } from '../utils/math';
 import { EXPRESSION_PRESETS, MorphController, zeroMorphs, type MorphName, type MorphWeights } from './ActorFace';
@@ -89,13 +90,14 @@ export class Actor {
     readonly id: string,
     readonly def: ActorObjectDef,
     gltf?: GLTF,
+    assets?: AssetLoader,
   ) {
     this.seed = hashString(id);
     this.rand = seededRandom(this.seed);
     this.breathPeriod = 3.4 + this.rand() * 1.2;
     this.blinkTimer = 1 + this.rand() * 3;
 
-    this.rig = gltf ? buildGltfRig(gltf) : buildProceduralRig(def);
+    this.rig = gltf ? buildGltfRig(gltf) : buildProceduralRig(def, assets);
     const scale = gltf ? 1 : (def.height ?? 1.75) / BASE_HEIGHT;
     this.bodyScale = scale;
     this.rig.body.scale.setScalar(scale);

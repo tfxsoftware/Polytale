@@ -28,6 +28,7 @@ export class AssetLoader {
   private readonly textureCache = new Map<string, Promise<THREE.Texture>>();
   private readonly resolvedGltf = new Map<string, GLTF>();
   private readonly resolvedAudio = new Map<string, AudioBuffer>();
+  private readonly resolvedTexture = new Map<string, THREE.Texture>();
 
   constructor(
     private readonly audioContext: BaseAudioContext,
@@ -38,10 +39,12 @@ export class AssetLoader {
   static manifestOf(script: StoryScript): AssetManifest {
     const models = new Set<string>();
     const audio = new Set<string>();
+    const textures = new Set<string>();
     const addObject = (o: unknown) => {
-      const def = o as { kind?: string; model?: string; prop?: string } | undefined;
-      if (!def || typeof def !== 'object' || !def.model) return;
-      if (def.kind === 'actor' || def.prop === 'model') models.add(def.model);
+      const def = o as { kind?: string; model?: string; prop?: string; palette?: { faceTexture?: string } } | undefined;
+      if (!def || typeof def !== 'object') return;
+      if (def.model && (def.kind === 'actor' || def.prop === 'model')) models.add(def.model);
+      if (def.kind === 'actor' && def.palette?.faceTexture) textures.add(def.palette.faceTexture);
     };
     const scenes = [script.scene, ...(script.chapters ?? []).map((c) => c?.scene)];
     for (const scene of scenes) for (const p of scene?.props ?? []) if (p.prop === 'model' && p.model) models.add(p.model);
@@ -56,7 +59,7 @@ export class AssetLoader {
         else if (ev.type === 'PLAY_SOUND' && ev.src && !ev.src.startsWith('procedural:')) audio.add(ev.src);
       }
     }
-    return { models: [...models], audio: [...audio], textures: [] };
+    return { models: [...models], audio: [...audio], textures: [...textures] };
   }
 
   /** Carrega um manifesto inteiro em paralelo, reportando progresso. */
@@ -126,6 +129,7 @@ export class AssetLoader {
         t.minFilter = THREE.NearestFilter;
         t.generateMipmaps = false;
         t.colorSpace = THREE.SRGBColorSpace;
+        this.resolvedTexture.set(url, t);
         return t;
       });
       this.textureCache.set(url, p);
@@ -141,6 +145,10 @@ export class AssetLoader {
 
   getAudio(url: string | undefined): AudioBuffer | undefined {
     return url ? this.resolvedAudio.get(url) : undefined;
+  }
+
+  getTexture(url: string | undefined): THREE.Texture | undefined {
+    return url ? this.resolvedTexture.get(url) : undefined;
   }
 
   loadedAudio(): IterableIterator<[string, AudioBuffer]> {

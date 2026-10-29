@@ -14,6 +14,9 @@ import {
   SOUND_BUSES,
   type ActorFrame,
   type AttachValue,
+  type AutoCameraDef,
+  type CameraCutEvent,
+  type CameraPreset,
   type Hand,
   type PoseFrame,
   type ReachFrame,
@@ -29,8 +32,11 @@ import {
   type FrameState,
   type LookTarget,
   type ObjectFrame,
+  type PlayAudioWithLipsyncEvent,
   type RGB,
   type RetroSettings,
+  type StoryEvent,
+  type StoryScript,
   type Vec3,
 } from './types';
 import { hashString, hexToRgb, isHexColor, lerp } from '../utils/math';
@@ -129,6 +135,83 @@ function shotSpecOf(ev: CameraShotSpec): CameraShotSpec {
   if (handheld !== undefined) spec.handheld = handheld;
   if (drift !== undefined) spec.drift = drift;
   return spec;
+}
+
+/* ---- Cobertura automática de câmera (meta.autoCamera) ---- */
+
+function resolveAutoCamera(script: StoryScript): Required<AutoCameraDef> | null {
+  const raw = script.meta?.autoCamera;
+  if (!raw) return null;
+  const def = raw === true ? {} : raw;
+  return { maxShotSeconds: def.maxShotSeconds ?? 4, wideEvery: def.wideEvery ?? 4 };
+}
+
+/** Já existe um CAMERA_CUT/CAMERA_TRANSITION escrito à mão perto deste instante? Esse sempre vence. */
+function hasExplicitCameraNear(timeline: StoryEvent[], from: number, to: number): boolean {
+  return timeline.some((e) => (e.type === 'CAMERA_CUT' || e.type === 'CAMERA_TRANSITION') && e.time >= from - 0.05 && e.time < to);
+}
+
+/** Posição (0-based) desta fala entre todas as PLAY_AUDIO_WITH_LIPSYNC do capítulo, por tempo. */
+function dialogueIndexOf(timeline: StoryEvent[], ev: PlayAudioWithLipsyncEvent): number {
+  const lines = timeline.filter((e): e is PlayAudioWithLipsyncEvent => e.type === 'PLAY_AUDIO_WITH_LIPSYNC').sort((a, b) => a.time - b.time);
+  return lines.indexOf(ev);
+}
+
+/** Outro ator mais próximo do que fala (para over_shoulder / reação), no instante da fala. */
+function nearestListener(ctx: CompileContext, speakerId: string, time: number): string | undefined {
+  const sp = ctx.query.positionOf(speakerId, time);
+  let best: string | undefined;
+  let bestD = Infinity;
+  for (const [id, def] of ctx.objects) {
+    if (id === speakerId || def.kind !== 'actor') continue;
+    const p = ctx.query.positionOf(id, time);
+    const d = (p[0] - sp[0]) ** 2 + (p[2] - sp[2]) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      best = id;
+    }
+  }
+  return best;
+}
+
+/** Plano para a n-ésima fala do capítulo: geral de tempos em tempos, senão varia entre falante/reação/sobre-o-ombro. */
+function chooseAutoShot(n: number, auto: Required<AutoCameraDef>, hasListener: boolean): { preset: CameraPreset; reaction: boolean } {
+  if (auto.wideEvery > 0 && n > 0 && n % auto.wideEvery === 0) return { preset: 'wide', reaction: false };
+  if (!hasListener) return { preset: 'close_up', reaction: false };
+  const cycle = n % 3;
+  if (cycle === 1) return { preset: 'medium', reaction: true };
+  if (cycle === 2) return { preset: 'over_shoulder', reaction: false };
+  return { preset: 'close_up', reaction: false };
+}
+
+/** Gera os CAMERA_CUT desta fala (plano principal + corte de reação se a fala for longa). */
+function autoCoverageOf(ev: PlayAudioWithLipsyncEvent, ctx: CompileContext): StoryEvent[] {
+  const auto = resolveAutoCamera(ctx.script);
+  if (!auto || ctx.objects.get(ev.target)?.kind !== 'actor') return [];
+  const timeline = ctx.script.timeline ?? [];
+  const speak = isNum(ev.duration) && ev.duration > 0 ? ev.duration : ctx.speechDuration(ev);
+  const n = dialogueIndexOf(timeline, ev);
+  if (n < 0) return [];
+  const listener = nearestListener(ctx, ev.target, ev.time);
+  const out: CameraCutEvent[] = [];
+
+  if (!hasExplicitCameraNear(timeline, ev.time, ev.time + speak)) {
+    const shot = chooseAutoShot(n, auto, !!listener);
+    const spec: CameraCutEvent = { time: ev.time, type: 'CAMERA_CUT', preset: shot.preset, label: 'auto-coverage' };
+    if (shot.preset !== 'wide') spec.subject = shot.reaction ? listener : ev.target;
+    if (shot.preset === 'over_shoulder') spec.over = listener;
+    out.push(spec);
+  }
+
+  // Fala longa: um corte de reação no meio, se não colidir com algo escrito à mão.
+  if (listener && speak > auto.maxShotSeconds) {
+    const midTime = ev.time + auto.maxShotSeconds;
+    if (!hasExplicitCameraNear(timeline, midTime, midTime + 0.01)) {
+      out.push({ time: midTime, type: 'CAMERA_CUT', preset: 'medium', subject: listener, label: 'auto-coverage' });
+    }
+  }
+
+  return out;
 }
 
 /* ---- Fábricas de tracks reutilizáveis ---- */
@@ -339,6 +422,7 @@ export function createDefaultHandlers(): HandlerMap {
         if (ev.subtitle !== undefined && typeof ev.subtitle !== 'boolean') errs.push(`'subtitle' deve ser true ou false`);
         return errs;
       },
+      expand: (ev, ctx) => autoCoverageOf(ev, ctx),
       interval(ev, ctx) {
         const speak = isNum(ev.duration) && ev.duration > 0 ? ev.duration : ctx.speechDuration(ev);
         const hold = ev.hold ?? 0.5;

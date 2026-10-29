@@ -190,13 +190,25 @@ export type PropType =
   | 'orb'
   | 'book'
   | 'cup'
-  | 'model';
+  | 'model'
+  | 'particles';
+
+export const PARTICLE_PRESETS = ['steam', 'smoke', 'dust', 'sparks'] as const;
+export type ParticlePreset = (typeof PARTICLE_PRESETS)[number];
+
+/** Apenas para prop = 'particles'. Determinístico por seed e tempo: o seek permanece reversível. */
+export interface ParticlesDef {
+  preset: ParticlePreset;
+  /** Número de partículas. Padrão depende do preset. */
+  count?: number;
+}
 
 export interface PropDef {
   prop: PropType;
   color?: string;
   /** Apenas para prop = 'model'. */
   model?: string;
+  particles?: ParticlesDef;
 }
 
 /** Cenografia estática (não endereçável pela timeline). */
@@ -260,6 +272,12 @@ export interface ActorPalette {
   eyes?: string;
   /** Cor de acessórios (chapéu, capa, cachecol, mochila...). */
   accent?: string;
+  /**
+   * URL de uma imagem (PNG com transparência) pintada sobre o rosto procedural
+   * (sobrancelhas, barba por fazer, dentes...), sem precisar de um modelo GLTF
+   * completo. Fica atrás dos olhos/boca procedurais, que continuam animando.
+   */
+  faceTexture?: string;
 }
 
 export const BODY_BUILDS = ['slim', 'average', 'athletic', 'heavy'] as const;
@@ -711,6 +729,18 @@ export interface WatermarkDef {
   color?: string;
 }
 
+/**
+ * Cobertura automática: gera `CAMERA_CUT`s a partir das falas (`PLAY_AUDIO_WITH_LIPSYNC`) — plano do
+ * ator que fala, plano reação de quem escuta, e um plano geral de tempos em tempos. Eventos de câmera
+ * explícitos no roteiro sempre têm prioridade (nenhum corte é gerado perto deles). `true` usa os padrões.
+ */
+export interface AutoCameraDef {
+  /** Divide falas mais longas que isto (s) com um corte de reação no meio. Padrão 4. */
+  maxShotSeconds?: number;
+  /** A cada quantas falas um plano geral reestabelece a cena. 0 = nunca. Padrão 4. */
+  wideEvery?: number;
+}
+
 export interface StoryMeta {
   title: string;
   author?: string;
@@ -724,6 +754,8 @@ export interface StoryMeta {
    */
   aspect?: AspectRatio;
   watermark?: WatermarkDef;
+  /** Cobertura automática de câmera para todo capítulo que não definir a sua própria. */
+  autoCamera?: boolean | AutoCameraDef;
 }
 
 /** Capítulo: uma cena completa (cenário próprio) dentro de uma história maior. */
@@ -741,6 +773,8 @@ export interface ChapterDef {
   transition?: 'fade' | 'cut';
   /** Cartela com o título no início do capítulo (padrão true). */
   showTitle?: boolean;
+  /** Cobertura automática de câmera; se omitido, herda de `meta.autoCamera`. */
+  autoCamera?: boolean | AutoCameraDef;
 }
 
 export const SUBTITLE_STYLES = ['box', 'plain', 'outline'] as const;

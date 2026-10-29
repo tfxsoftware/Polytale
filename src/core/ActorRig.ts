@@ -5,6 +5,7 @@ import { PROCEDURAL_RIG, type ActorObjectDef, type Hand, type Joint, type Socket
 import { addAccessories, addHair, addOutfit, buildProportions, createHeadGeometry } from './CharacterStyle';
 import { applyPS1VertexSnap } from '../systems/PostProcessing';
 import { createMouthGeometry, createEyelidGeometry, createBrowGeometry } from './ActorFace';
+import type { AssetLoader } from './AssetLoader';
 
 /* ========================================================================== */
 /*  Rig procedural                                                            */
@@ -134,7 +135,7 @@ function buildLimb(
   return { upper, lower };
 }
 
-export function buildProceduralRig(def: ActorObjectDef): ProceduralRig {
+export function buildProceduralRig(def: ActorObjectDef, assets?: AssetLoader): ProceduralRig {
   const p = def.palette ?? {};
   const skin = new THREE.Color(p.skin ?? '#e0ac69');
   const mSkin = lambert(skin);
@@ -249,6 +250,18 @@ export function buildProceduralRig(def: ActorObjectDef): ProceduralRig {
   mouth.position.set(0, -0.105, faceZ(0, -0.13, 0.09, 0.07) + 0.003);
   mouth.name = 'mouth';
   face.add(mouth);
+
+  // Rosto pintado (opcional): atrás dos olhos/boca procedurais, que continuam na frente e animando.
+  const faceTexture = assets?.getTexture(p.faceTexture);
+  if (faceTexture) {
+    const paint = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.34, 0.32),
+      new THREE.MeshLambertMaterial({ map: faceTexture, transparent: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }),
+    );
+    paint.position.set(0, -0.01, faceZ(0, -0.01, 0.17, 0.16) + 0.001);
+    paint.name = 'facePaint';
+    face.add(paint);
+  }
 
   // Visual: cabelo, roupa e acessórios.
   const fitted = (fit: { y: number; scaleX: number; scaleZ: number }) => {

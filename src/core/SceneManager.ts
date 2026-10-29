@@ -7,6 +7,7 @@ import type {
   LightDef,
   LookTarget,
   ObjectFrame,
+  ParticlePreset,
   PropDef,
   ReachTarget,
   SceneDef,
@@ -19,7 +20,7 @@ import type { LipsyncState } from '../systems/AudioLipsync';
 import { applyPS1VertexSnap } from '../systems/PostProcessing';
 import { Actor } from './Actor';
 import { DayNightCycle, buildFurniture, buildRoom } from './Environment';
-import { DEG2RAD, fbm1D, hashString, seededRandom } from '../utils/math';
+import { DEG2RAD, fbm1D, hashString, lerp, seededRandom } from '../utils/math';
 
 type Animated = (time: number) => void;
 
@@ -71,6 +72,49 @@ function canvasTexture(size: number, draw: (ctx: CanvasRenderingContext2D, size:
   return tex;
 }
 
+/* ========================================================================== */
+/*  Partículas (steam / smoke / dust / sparks)                                */
+/* ========================================================================== */
+
+interface ParticleSpec {
+  count: number;
+  color: string;
+  size: number;
+  /** Altura percorrida num ciclo (m). */
+  height: number;
+  /** Deriva horizontal máxima (m). */
+  spread: number;
+  /** Duração de um ciclo (s). */
+  period: number;
+  /** Frequência do ruído de deriva. */
+  drift: number;
+  additive: boolean;
+}
+
+const PARTICLE_SPECS: Record<ParticlePreset, ParticleSpec> = {
+  steam: { count: 14, color: '#e8eef5', size: 0.22, height: 1.6, spread: 0.35, period: 3.2, drift: 0.6, additive: false },
+  smoke: { count: 12, color: '#55585e', size: 0.32, height: 2.2, spread: 0.5, period: 4, drift: 0.4, additive: false },
+  dust: { count: 18, color: '#cbbfa0', size: 0.05, height: 0.6, spread: 0.8, period: 6, drift: 0.25, additive: false },
+  sparks: { count: 16, color: '#ffb23f', size: 0.045, height: 0.9, spread: 0.3, period: 1.1, drift: 2, additive: true },
+};
+
+/** Textura de disco suave compartilhada por todos os sistemas de partículas. */
+let particleTexture: THREE.CanvasTexture | null = null;
+function softDiscTexture(): THREE.CanvasTexture {
+  if (particleTexture) return particleTexture;
+  particleTexture = canvasTexture(32, (ctx, s) => {
+    const g = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.6, 'rgba(255,255,255,0.5)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, s, s);
+  });
+  particleTexture.magFilter = THREE.LinearFilter;
+  particleTexture.minFilter = THREE.LinearFilter;
+  return particleTexture;
+}
+
 /**
  * Gerencia a cena: céu, névoa, chão, luzes, cenografia e todos os objetos
  * instanciados por SPAWN_OBJECT (atores e props). Aplica o FrameState da
@@ -82,6 +126,8 @@ export class SceneManager implements ActorProvider {
   private readonly props = new Map<string, SpawnedProp>();
   private readonly lights = new Map<string, SceneLight>();
   private readonly animated: Animated[] = [];
+  /** Animações puras de `frame.time` (ex.: partículas) — diferente de `animated` (tempo real), ficam reversíveis no seek. */
+  private readonly frameAnimated: Animated[] = [];
   /** Tudo que é recriado a cada história. */
   private readonly world = new THREE.Group();
   private dayNight: DayNightCycle | null = null;
@@ -137,7 +183,7 @@ export class SceneManager implements ActorProvider {
       if (def.kind === 'actor') {
         const gltf = assets.getGLTF(def.model);
         if (def.model && !gltf) console.warn(`[SceneManager] modelo '${def.model}' indisponível; '${id}' usará personagem procedural.`);
-        const actor = new Actor(id, def, gltf);
+        const actor = new Actor(id, def, gltf, assets);
         actor.setGestureLibrary(story.script.gestures ?? {});
         this.actors.set(id, actor);
         this.world.add(actor.root);
@@ -193,6 +239,7 @@ export class SceneManager implements ActorProvider {
     this.props.clear();
     this.lights.clear();
     this.animated.length = 0;
+    this.frameAnimated.length = 0;
     this.world.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (mesh.isMesh) {
@@ -232,6 +279,8 @@ export class SceneManager implements ActorProvider {
       prop.object.rotation.set(obj.rotation[0] * DEG2RAD, obj.rotation[1] * DEG2RAD, obj.rotation[2] * DEG2RAD, 'YXZ');
       prop.object.scale.setScalar(obj.scale);
     }
+
+    for (const fn of this.frameAnimated) fn(frame.time);
 
     for (const [id, l] of Object.entries(frame.lights)) {
       const sl = this.lights.get(id);
@@ -697,6 +746,39 @@ export class SceneManager implements ActorProvider {
           if (!mesh.isMesh) return;
           const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
           mats.forEach((m) => applyPS1VertexSnap(m));
+        });
+        break;
+      }
+      case 'particles': {
+        const spec = PARTICLE_SPECS[def.particles?.preset ?? 'steam'];
+        const count = Math.max(1, Math.min(64, def.particles?.count ?? spec.count));
+        const tex = softDiscTexture();
+        // Deslocamento de fase fixo por partícula (sorteado uma vez na criação; a partir daí é puro em `t`).
+        const phase = Array.from({ length: count }, () => rand());
+        const sprites = Array.from({ length: count }, () => {
+          const mat = new THREE.SpriteMaterial({
+            map: tex,
+            color: def.color ?? spec.color,
+            transparent: true,
+            depthWrite: false,
+            opacity: 0,
+            blending: spec.additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+          });
+          const sprite = new THREE.Sprite(mat);
+          sprite.castShadow = false;
+          g.add(sprite);
+          return sprite;
+        });
+        this.frameAnimated.push((t) => {
+          for (let i = 0; i < sprites.length; i++) {
+            const s = seed + i * 131;
+            const u = (t / spec.period + phase[i]) % 1;
+            const x = fbm1D(t * spec.drift, s) * spec.spread * u;
+            const z = fbm1D(t * spec.drift + 50, s) * spec.spread * u;
+            sprites[i].position.set(x, u * spec.height, z);
+            sprites[i].scale.setScalar(spec.size * lerp(0.6, 1.4, u));
+            (sprites[i].material as THREE.SpriteMaterial).opacity = Math.sin(Math.PI * u);
+          }
         });
         break;
       }

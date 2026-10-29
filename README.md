@@ -21,16 +21,20 @@ voices and sounds can all be procedural.
   holding and handing over objects, and ready-made interactions (`handshake`, `hug`, `give`,
   `pickUp`, `push`...).
 - **Character variety**: body builds, head shapes (egg, bulb, cone, can...), hair styles, outfits (robe, dress) and accessories (hats, glasses,
-  beard, scarf, backpack, a cape that sways as they walk).
+  beard, scarf, backpack, a cape that sways as they walk). A `palette.faceTexture` image can paint
+  brows/stubble/detail onto a procedural face without a full GLTF model.
 - **Chapters**: multi-scene stories with their own sets, fade transitions, title cards and a shared
   `cast`.
 - **Sets**: outdoor scenes with an automatic day/night cycle (sky, sun/moon, stars) or interiors built
-  from a `room` (walls you can see through from outside, doors, windows) plus furniture.
-- **Lip-synced dialogue**: a 512-bin `AnalyserNode` (RMS energy drives `jawOpen`), a procedural
-  90s-game "babble" voice, a `speechSynthesis` fallback, and RPG-style subtitles.
+  from a `room` (walls you can see through from outside, doors, windows) plus furniture, and
+  deterministic `particles` props (steam, smoke, dust, sparks).
+- **Lip-synced dialogue**: a 512-bin `AnalyserNode` drives `jawOpen` from RMS energy and `mouthWide`/
+  `mouthPucker` (visemes) from the spectral balance, a procedural 90s-game "babble" voice with its own
+  text-driven visemes, a `speechSynthesis` fallback, and RPG-style subtitles.
 - **Camera direction**: presets (`wide`, `medium`, `close_up`, `over_shoulder`, `two_shot`,
   `low_angle`) that track actors and avoid occlusion, lerp/slerp transitions, continuous
-  dolly-in/pan `drift`, and camera shake with exponential decay.
+  dolly-in/pan `drift`, camera shake with exponential decay, and an opt-in `meta.autoCamera` pass that
+  generates coverage (speaker/reaction/wide cuts) from the dialogue — explicit camera events always win.
 - **PS1 visuals**: a GLSL shader with downscaling, 4x4 Bayer dithering, 15-bit color, scanlines and
   CRT curvature, plus *vertex snapping* (the PlayStation vertex wobble) and a color grade (`fx.grade`:
   warm, cool, noir) independent of the retro look.
@@ -160,6 +164,11 @@ also on screen and in exported videos.
 `SHOW_TITLE` (`title`, `subtitle?`, `duration?`, `overlay?`) shows a title card at any point in the timeline, not just at a
 chapter's start — the scene keeps playing underneath. `overlay: true` drops the dark band for text-with-shadow over the
 running scene (good for an outro/credits card); the default banded look matches the automatic chapter-start cards.
+
+`meta.autoCamera` (or per-chapter) turns on generated coverage: a `CAMERA_CUT` per `PLAY_AUDIO_WITH_LIPSYNC` line — close-up
+on the speaker, an occasional reaction shot on the nearest other actor, over-the-shoulder, and a wide re-establishing shot
+every `wideEvery` lines (`maxShotSeconds` splits a long line with a mid-line reaction cut). Any `CAMERA_CUT`/`CAMERA_TRANSITION`
+you place by hand always wins over a generated one near the same time.
 
 The full reference (fields, accepted values, directing rules, and a dialogue timing guide of
 roughly 1 s per 12–15 characters) is in **[`skills.md`](./skills.md)**.
