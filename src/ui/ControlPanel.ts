@@ -12,11 +12,15 @@ export interface ControlPanelCallbacks {
   onToggleMute(): boolean;
   onRate(rate: number): void;
   onOpenEditor(): void;
+  /** Liga/desliga a gravação; retorna se está gravando. */
+  onToggleRecord(): Promise<boolean>;
+  onOpenGenerator(): void;
+  onToggleTracks(): void;
 }
 
 export interface TimelineMarker {
   time: number;
-  type: EventType;
+  type: EventType | 'CHAPTER';
   label: string;
 }
 
@@ -51,6 +55,7 @@ export class ControlPanel {
   private readonly retroBtn: HTMLButtonElement;
   private readonly muteBtn: HTMLButtonElement;
   private readonly rateBtn: HTMLButtonElement;
+  private readonly recBtn: HTMLButtonElement;
   private readonly scrubber: HTMLInputElement;
   private readonly markerLayer: HTMLDivElement;
   private readonly timeLabel: HTMLSpanElement;
@@ -100,10 +105,26 @@ export class ControlPanel {
     this.muteBtn = button('SOM', 'Mudo (M)');
     this.retroBtn = button('RETRO FX', 'Liga/desliga shader retrô (R)', 'cp-retro is-on');
     const editBtn = button('{ } SCRIPT', 'Editar StoryScript (E)');
+    const tracksBtn = button('TRILHAS', 'Editor visual da timeline (T)');
+    const aiBtn = button('✦ IA', 'Gerar roteiro com IA (G)');
+    this.recBtn = button('● REC', 'Gravar vídeo .webm do início ao fim (V)', 'cp-rec');
     this.fpsLabel = document.createElement('span');
     this.fpsLabel.className = 'cp-fps';
 
-    row.append(this.playBtn, restartBtn, this.timeLabel, scrubWrap, this.rateBtn, this.muteBtn, this.retroBtn, editBtn, this.fpsLabel);
+    row.append(
+      this.playBtn,
+      restartBtn,
+      this.timeLabel,
+      scrubWrap,
+      this.rateBtn,
+      this.muteBtn,
+      this.retroBtn,
+      editBtn,
+      tracksBtn,
+      aiBtn,
+      this.recBtn,
+      this.fpsLabel,
+    );
     this.root.append(this.titleLabel, this.status, row);
     parent.appendChild(this.root);
 
@@ -113,6 +134,9 @@ export class ControlPanel {
     this.muteBtn.addEventListener('click', () => this.setMuted(cb.onToggleMute()));
     this.retroBtn.addEventListener('click', () => this.setRetro(cb.onToggleRetro()));
     editBtn.addEventListener('click', () => cb.onOpenEditor());
+    tracksBtn.addEventListener('click', () => cb.onToggleTracks());
+    aiBtn.addEventListener('click', () => cb.onOpenGenerator());
+    this.recBtn.addEventListener('click', () => void this.toggleRecord());
 
     this.scrubber.addEventListener('pointerdown', () => {
       this.scrubbing = true;
@@ -139,7 +163,8 @@ export class ControlPanel {
     this.markerLayer.replaceChildren(
       ...markers.map((m) => {
         const el = document.createElement('div');
-        const kind = m.type === 'PLAY_AUDIO_WITH_LIPSYNC' ? 'is-dialogue' : m.type === 'INTERACT' ? 'is-interact' : 'is-camera';
+        const kind =
+          m.type === 'PLAY_AUDIO_WITH_LIPSYNC' ? 'is-dialogue' : m.type === 'INTERACT' ? 'is-interact' : m.type === 'CHAPTER' ? 'is-chapter' : 'is-camera';
         el.className = `cp-marker ${kind}`;
         el.style.left = `${(m.time / Math.max(0.001, duration)) * 100}%`;
         el.title = `${formatTime(m.time)} — ${m.label}`;
@@ -156,6 +181,15 @@ export class ControlPanel {
     this.timeLabel.textContent = `${formatTime(s.time)} / ${formatTime(s.duration)}`;
     if (!this.scrubbing) this.scrubber.value = String(Math.round((s.time / Math.max(0.001, s.duration)) * 1000));
     this.fpsLabel.textContent = `${Math.round(fps)} fps`;
+  }
+
+  setRecording(on: boolean): void {
+    this.recBtn.classList.toggle('is-recording', on);
+    this.recBtn.textContent = on ? '■ PARAR' : '● REC';
+  }
+
+  private async toggleRecord(): Promise<void> {
+    this.setRecording(await this.cb.onToggleRecord());
   }
 
   setRetro(on: boolean): void {
@@ -241,6 +275,18 @@ export class ControlPanel {
       case 'e':
       case 'E':
         this.cb.onOpenEditor();
+        break;
+      case 't':
+      case 'T':
+        this.cb.onToggleTracks();
+        break;
+      case 'g':
+      case 'G':
+        this.cb.onOpenGenerator();
+        break;
+      case 'v':
+      case 'V':
+        void this.toggleRecord();
         break;
       default:
         if (/^[1-5]$/.test(e.key)) {

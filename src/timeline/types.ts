@@ -170,6 +170,13 @@ export type PropType =
   | 'pillar'
   | 'lamp'
   | 'stool'
+  | 'table'
+  | 'chair'
+  | 'bookshelf'
+  | 'bed'
+  | 'rug'
+  | 'candle'
+  | 'door'
   | 'orb'
   | 'book'
   | 'cup'
@@ -190,6 +197,31 @@ export interface StaticPropDef extends PropDef {
   scale?: number;
 }
 
+export type WallSide = 'north' | 'south' | 'east' | 'west';
+
+/** Abertura numa parede do cômodo. `offset` = deslocamento do centro ao longo da parede (m). */
+export interface WallOpening {
+  wall: WallSide;
+  offset?: number;
+  width?: number;
+}
+
+/**
+ * Ambiente interno (cômodo) centrado na origem. Norte = -Z, Sul = +Z, Leste = +X, Oeste = -X.
+ * As paredes só são visíveis por dentro: câmeras do lado de fora enxergam através delas.
+ */
+export interface RoomDef {
+  width: number;
+  depth: number;
+  height?: number;
+  wallColor?: string;
+  floorColor?: string;
+  floor?: 'wood' | 'stone' | 'tiles';
+  ceiling?: boolean;
+  doors?: WallOpening[];
+  windows?: WallOpening[];
+}
+
 export interface SceneDef {
   background?: string;
   sky?: SkyDef;
@@ -197,6 +229,12 @@ export interface SceneDef {
   ground?: GroundDef;
   lights?: LightDef[];
   props?: StaticPropDef[];
+  room?: RoomDef;
+  /**
+   * Hora do dia (0–24). Quando definida, a engine cria sol/lua, céu e névoa
+   * automáticos e permite SET_TIME_OF_DAY. Combina com `lights` do script.
+   */
+  timeOfDay?: number;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -210,7 +248,32 @@ export interface ActorPalette {
   pants?: string;
   shoes?: string;
   eyes?: string;
+  /** Cor de acessórios (chapéu, capa, cachecol, mochila...). */
+  accent?: string;
 }
+
+export const BODY_BUILDS = ['slim', 'average', 'athletic', 'heavy'] as const;
+export type BodyBuild = (typeof BODY_BUILDS)[number];
+
+export const HAIR_STYLES = ['short', 'long', 'ponytail', 'bun', 'spiky', 'mohawk', 'bald'] as const;
+export type HairStyle = (typeof HAIR_STYLES)[number];
+
+export const OUTFITS = ['casual', 'robe', 'dress'] as const;
+export type Outfit = (typeof OUTFITS)[number];
+
+export const ACCESSORIES = [
+  'hat',
+  'wizardHat',
+  'cap',
+  'crown',
+  'glasses',
+  'beard',
+  'mustache',
+  'scarf',
+  'backpack',
+  'cape',
+] as const;
+export type Accessory = (typeof ACCESSORIES)[number];
 
 /**
  * - 'speech': Web Speech API (window.speechSynthesis), lipsync procedural estimado pelo texto.
@@ -245,6 +308,11 @@ export interface ActorObjectDef {
   idleClip?: string;
   /** Altura aproximada (m) usada no personagem procedural. */
   height?: number;
+  /** Tipo de corpo do personagem procedural. */
+  build?: BodyBuild;
+  hair?: HairStyle;
+  outfit?: Outfit;
+  accessories?: Accessory[];
 }
 
 export interface PropObjectDef extends PropDef {
@@ -504,6 +572,12 @@ export interface SetRetroFxEvent extends EventBase {
   settings?: Partial<RetroSettings>;
 }
 
+export interface SetTimeOfDayEvent extends EventBase {
+  type: 'SET_TIME_OF_DAY';
+  /** Hora alvo (0–24). O tempo sempre avança (de 22 para 2 passa pela meia-noite). */
+  hour: number;
+}
+
 export interface FadeScreenEvent extends EventBase {
   type: 'FADE_SCREEN';
   /** 0 = cena visível, 1 = tela coberta pela cor. */
@@ -544,6 +618,7 @@ export type StoryEvent =
   | InteractEvent
   | PlayAnimationEvent
   | SetRetroFxEvent
+  | SetTimeOfDayEvent
   | FadeScreenEvent
   | FlashScreenEvent
   | PlaySoundEvent;
@@ -559,6 +634,23 @@ export interface StoryMeta {
   loop?: boolean;
 }
 
+/** Capítulo: uma cena completa (cenário próprio) dentro de uma história maior. */
+export interface ChapterDef {
+  title: string;
+  /** Cenário/efeitos/câmeras do capítulo; se omitidos, herdam os do topo do script. */
+  scene?: SceneDef;
+  fx?: FxDef;
+  cameras?: CameraShotDef[];
+  gestures?: Record<string, GestureDef>;
+  timeline: StoryEvent[];
+  /** Duração mínima do capítulo (s). */
+  duration?: number;
+  /** Entrada do capítulo: 'fade' (padrão, escurece e clareia) ou 'cut'. */
+  transition?: 'fade' | 'cut';
+  /** Cartela com o título no início do capítulo (padrão true). */
+  showTitle?: boolean;
+}
+
 export interface StoryScript {
   meta: StoryMeta;
   scene?: SceneDef;
@@ -566,7 +658,15 @@ export interface StoryScript {
   cameras?: CameraShotDef[];
   /** Gestos customizados por keyframes, usados por PLAY_GESTURE. */
   gestures?: Record<string, GestureDef>;
-  timeline: StoryEvent[];
+  /**
+   * Elenco reutilizável: um SPAWN_OBJECT sem `object` cujo `target` esteja aqui
+   * usa esta definição (evita repetir o personagem em cada capítulo).
+   */
+  cast?: Record<string, ObjectDef>;
+  /** Cena única. Obrigatório quando não há `chapters`. */
+  timeline?: StoryEvent[];
+  /** História em capítulos, tocados em sequência. */
+  chapters?: ChapterDef[];
 }
 
 /* -------------------------------------------------------------------------- */
@@ -691,6 +791,8 @@ export interface FrameState {
   camera: CameraValue;
   shakes: ShakeState[];
   fx: FxFrame;
+  /** Hora do dia (pode passar de 24; aplicar módulo). null = ciclo desligado. */
+  hour: number | null;
   dialogues: ActiveDialogue[];
   sounds: ActiveSound[];
 }

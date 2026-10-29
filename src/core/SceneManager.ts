@@ -18,6 +18,7 @@ import type { ActorProvider } from '../systems/CameraDirector';
 import type { LipsyncState } from '../systems/AudioLipsync';
 import { applyPS1VertexSnap } from '../systems/PostProcessing';
 import { Actor } from './Actor';
+import { DayNightCycle, buildFurniture, buildRoom } from './Environment';
 import { DEG2RAD, fbm1D, hashString, seededRandom } from '../utils/math';
 
 type Animated = (time: number) => void;
@@ -83,6 +84,7 @@ export class SceneManager implements ActorProvider {
   private readonly animated: Animated[] = [];
   /** Tudo que é recriado a cada história. */
   private readonly world = new THREE.Group();
+  private dayNight: DayNightCycle | null = null;
   private elapsed = 0;
   private readonly tmp = new THREE.Vector3();
   private readonly tmpReach = new THREE.Vector3();
@@ -120,7 +122,8 @@ export class SceneManager implements ActorProvider {
     this.clear();
     const scene = story.script.scene ?? {};
     this.buildEnvironment(scene);
-    this.buildLights(scene.lights ?? defaultLights());
+    // Com ciclo dia/noite o sol e o céu são automáticos; luzes do script somam a eles.
+    this.buildLights(scene.lights ?? (this.dayNight ? [] : defaultLights()));
     for (const p of scene.props ?? []) {
       const obj = this.createProp(p, assets, hashString(JSON.stringify(p)));
       obj.position.set(p.position[0], p.position[1], p.position[2]);
@@ -148,6 +151,42 @@ export class SceneManager implements ActorProvider {
     }
   }
 
+  /**
+   * Pré-compila os shaders de tudo que a história pode mostrar (inclusive objetos
+   * ainda ocultos), evitando travadas quando algo aparece pela primeira vez.
+   */
+  prewarm(renderer: THREE.WebGLRenderer, camera: THREE.Camera): void {
+    const hidden: THREE.Object3D[] = [];
+    this.world.traverse((o) => {
+      if (!o.visible) {
+        hidden.push(o);
+        o.visible = true;
+      }
+    });
+    renderer.compile(this.scene, camera);
+    for (const o of hidden) o.visible = false;
+  }
+
+  /**
+   * Luz que acompanha um objeto. Fica na raiz do mundo (sempre "visível" para o
+   * renderer) e só tem a intensidade zerada quando o dono está oculto: o número de
+   * luzes da cena não muda, então os shaders não são recompilados.
+   */
+  private followLight<L extends THREE.Light>(light: L, owner: THREE.Object3D, offset: THREE.Vector3): L {
+    light.userData.baseIntensity = light.intensity;
+    this.world.add(light);
+    const isShown = (o: THREE.Object3D | null): boolean => {
+      for (let n = o; n && n !== this.world; n = n.parent) if (!n.visible) return false;
+      return true;
+    };
+    this.animated.push(() => {
+      owner.updateWorldMatrix(true, false);
+      light.position.copy(offset).applyMatrix4(owner.matrixWorld);
+      light.intensity = isShown(owner) && owner.parent ? (light.userData.baseIntensity as number) : 0;
+    });
+    return light;
+  }
+
   clear(): void {
     for (const a of this.actors.values()) a.dispose();
     this.actors.clear();
@@ -169,6 +208,7 @@ export class SceneManager implements ActorProvider {
     });
     this.world.clear();
     this.scene.fog = null;
+    this.dayNight = null;
   }
 
   /* ---------------------------------------------------------------------- */
@@ -177,6 +217,8 @@ export class SceneManager implements ActorProvider {
 
   /** Aplica o estado determinístico da timeline. */
   applyFrame(frame: FrameState): void {
+    if (this.dayNight && frame.hour !== null) this.dayNight.apply(frame.hour);
+
     for (const [id, obj] of Object.entries(frame.objects)) {
       const actor = this.actors.get(id);
       if (actor) {
@@ -218,7 +260,6 @@ export class SceneManager implements ActorProvider {
       const flicker = sl.def.flicker ?? 0;
       sl.light.intensity = flicker > 0 ? base * (1 + fbm1D(t * 6, sl.flickerSeed) * flicker) : base;
     }
-    for (const fn of this.animated) fn(t);
 
     for (const actor of this.actors.values()) {
       const af = frame.actors[actor.id];
@@ -247,6 +288,9 @@ export class SceneManager implements ActorProvider {
       const obj = frame.objects[id];
       if (obj) this.applyAttachment(prop.object, obj, obj.attach);
     }
+
+    // Animações ambientes por último: luzes que seguem objetos já veem a posição final.
+    for (const fn of this.animated) fn(t);
   }
 
   /** Converte um alvo de alcance (REACH) em ponto no mundo. */
@@ -329,8 +373,18 @@ export class SceneManager implements ActorProvider {
     const bg = new THREE.Color(def.background ?? def.fog?.color ?? '#10121c');
     this.scene.background = bg;
     if (def.fog) this.scene.fog = new THREE.Fog(def.fog.color, def.fog.near, def.fog.far);
-    if (def.sky) this.world.add(this.createSky(def.sky));
-    this.world.add(this.createGround(def.ground ?? { color: '#3d5a32', color2: '#35502b' }));
+    else if (typeof def.timeOfDay === 'number' && !def.room) this.scene.fog = new THREE.Fog('#000000', 28, 95);
+
+    if (typeof def.timeOfDay === 'number') {
+      this.dayNight = new DayNightCycle(this.scene);
+      this.world.add(this.dayNight.group);
+      this.dayNight.apply(def.timeOfDay);
+    } else if (def.sky) {
+      this.world.add(this.createSky(def.sky));
+    }
+    if (def.room) this.world.add(buildRoom(def.room));
+    // Em interiores o chão externo só aparece se for pedido (ex.: visto pela porta).
+    if (!def.room || def.ground) this.world.add(this.createGround(def.ground ?? { color: '#3d5a32', color2: '#35502b' }));
   }
 
   private createSky(sky: SkyDef): THREE.Mesh {
@@ -572,15 +626,15 @@ export class SceneManager implements ActorProvider {
           new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.25, depthWrite: false }),
         );
         shell.castShadow = false;
-        const glow = new THREE.PointLight(color, 1.6, 3.5, 1.6);
-        g.add(core, shell, glow);
+        g.add(core, shell);
+        const glow = this.followLight(new THREE.PointLight(color, 1.6, 3.5, 1.6), g, new THREE.Vector3());
         const fs = seed % 1000;
         this.animated.push((t) => {
           core.rotation.set(t * 0.9, t * 1.3, 0);
           shell.rotation.set(-t * 0.6, t * 0.4, t * 0.2);
           const pulse = 1 + fbm1D(t * 2.5, fs) * 0.12;
           shell.scale.setScalar(pulse);
-          glow.intensity = 1.6 * pulse;
+          glow.userData.baseIntensity = 1.6 * pulse;
         });
         break;
       }
@@ -598,6 +652,31 @@ export class SceneManager implements ActorProvider {
         const handle = new THREE.Mesh(new THREE.TorusGeometry(0.025, 0.007, 4, 6), m);
         handle.position.x = 0.05;
         g.add(handle);
+        break;
+      }
+      case 'candle': {
+        g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.16, 6).translate(0, 0.08, 0), lambert(def.color ?? '#efe6cf')));
+        const flame = new THREE.Mesh(new THREE.ConeGeometry(0.022, 0.06, 4).translate(0, 0.03, 0), emissive('#ffcf6a'));
+        flame.position.y = 0.17;
+        flame.castShadow = false;
+        g.add(flame);
+        const light = this.followLight(new THREE.PointLight('#ffb35a', 2.2, 5, 1.6), g, new THREE.Vector3(0, 0.25, 0));
+        const fs = seed % 1000;
+        this.animated.push((t) => {
+          const n = fbm1D(t * 7, fs);
+          flame.scale.set(1, 1 + n * 0.35, 1);
+          light.userData.baseIntensity = 2.2 * (1 + n * 0.25);
+        });
+        break;
+      }
+      case 'table':
+      case 'chair':
+      case 'bookshelf':
+      case 'bed':
+      case 'rug':
+      case 'door': {
+        const furniture = buildFurniture(def.prop, def.color, seed);
+        if (furniture) g.add(furniture);
         break;
       }
       case 'model': {

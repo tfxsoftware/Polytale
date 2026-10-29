@@ -1,3 +1,5 @@
+import { downloadScript, openScriptFile, shareUrl } from '../core/ScriptStorage';
+
 export interface TimelineEditorCallbacks {
   /** Aplica o JSON. Retorna lista de erros (vazia = sucesso). */
   onApply(script: unknown): Promise<string[]>;
@@ -67,11 +69,16 @@ export class TimelineEditor {
 
     const footer = document.createElement('div');
     footer.className = 'editor-footer';
+    const openBtn = this.button('Abrir…', 'Abrir um arquivo .json');
+    const saveBtn = this.button('Salvar .json', 'Baixar o roteiro como arquivo');
+    const linkBtn = this.button('Copiar link', 'Copiar um link com o roteiro embutido');
     const formatBtn = this.button('Formatar', 'Reindentar JSON');
     const copyBtn = this.button('Copiar', 'Copiar para a área de transferência');
     const resetBtn = this.button('Restaurar demo', 'Carregar o script de demonstração');
     this.applyBtn = this.button('Aplicar ▶', 'Aplicar (Ctrl+Enter)', 'is-primary');
-    footer.append(formatBtn, copyBtn, resetBtn, this.applyBtn);
+    const spacer = document.createElement('span');
+    spacer.className = 'editor-spacer';
+    footer.append(openBtn, saveBtn, linkBtn, spacer, formatBtn, copyBtn, resetBtn, this.applyBtn);
 
     modal.append(header, this.textarea, this.errors, footer);
     this.backdrop.append(modal);
@@ -82,6 +89,33 @@ export class TimelineEditor {
       if (e.target === this.backdrop) this.close();
     });
     formatBtn.addEventListener('click', () => this.format());
+    openBtn.addEventListener('click', () => {
+      openScriptFile().then(
+        (script) => {
+          if (script === null) return;
+          this.setText(script);
+          this.showErrors([]);
+          this.flash('Arquivo carregado — revise e clique em Aplicar.');
+        },
+        (err: Error) => this.showErrors([err.message]),
+      );
+    });
+    saveBtn.addEventListener('click', () => {
+      const r = this.parse();
+      if (!r.ok) return this.showErrors([r.error]);
+      const title = (r.value as { meta?: { title?: string } })?.meta?.title ?? 'roteiro';
+      downloadScript(r.value, title);
+    });
+    linkBtn.addEventListener('click', () => {
+      const r = this.parse();
+      if (!r.ok) return this.showErrors([r.error]);
+      void shareUrl(r.value)
+        .then((url) => navigator.clipboard.writeText(url).then(() => url))
+        .then(
+          (url) => this.flash(`Link copiado (${Math.round(url.length / 1024)} KB).`),
+          () => this.flash('Não foi possível copiar o link.'),
+        );
+    });
     copyBtn.addEventListener('click', () => {
       void navigator.clipboard?.writeText(this.textarea.value).then(
         () => this.flash('Copiado.'),

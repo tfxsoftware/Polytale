@@ -6,6 +6,12 @@ export interface SpeakerInfo {
   color: string;
 }
 
+/** Quantos caracteres da fala já foram "datilografados" no instante atual. */
+export function revealedChars(d: ActiveDialogue): number {
+  const reveal = clamp01(d.localTime / Math.max(0.05, d.speakDuration * 0.92));
+  return Math.ceil(d.text.length * reveal);
+}
+
 /**
  * Legendas estilo RPG dos anos 90: caixa com nome do falante e texto
  * revelado em "máquina de escrever" sincronizado ao tempo da fala.
@@ -26,11 +32,7 @@ export class DialogueBox {
   }
 
   render(dialogues: ActiveDialogue[]): void {
-    const items = dialogues.map((d) => {
-      const reveal = clamp01(d.localTime / Math.max(0.05, d.speakDuration * 0.92));
-      const chars = Math.ceil(d.text.length * reveal);
-      return { d, chars };
-    });
+    const items = dialogues.map((d) => ({ d, chars: revealedChars(d) }));
     const signature = items.map((i) => `${i.d.key}:${i.chars}`).join('|');
     if (signature === this.lastSignature) return;
     this.lastSignature = signature;

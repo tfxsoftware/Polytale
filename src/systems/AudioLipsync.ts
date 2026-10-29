@@ -425,6 +425,8 @@ type Playing = PlayingBuffer | PlayingSpeech;
  */
 export class AudioLipsync {
   readonly context: AudioContext;
+  /** Saída final da mixagem (pós-compressor) — ponto de captura para gravação. */
+  readonly output: AudioNode;
   private readonly master: GainNode;
   private readonly sfxBus: GainNode;
   private readonly channels = new Map<string, ActorChannel>();
@@ -447,6 +449,7 @@ export class AudioLipsync {
     this.master = this.context.createGain();
     this.master.gain.value = 0.9;
     this.master.connect(compressor).connect(this.context.destination);
+    this.output = compressor;
     this.sfxBus = this.context.createGain();
     this.sfxBus.gain.value = 0.6;
     this.sfxBus.connect(this.master);

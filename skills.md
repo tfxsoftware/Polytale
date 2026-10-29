@@ -64,7 +64,9 @@ expressões, gestos, olhares e efeitos — sempre a serviço da clareza da hist�
 | `fx` | não | Pós-processamento retrô inicial (padrão: ligado). |
 | `cameras` | não | Planos fixos nomeados (o primeiro é o plano inicial). |
 | `gestures` | não | Gestos customizados por keyframes (seção 4.16). |
-| `timeline` | sim | Lista de eventos. |
+| `cast` | não | Elenco reutilizável `{ id: definição }` (seção 3.7). |
+| `timeline` | sim* | Lista de eventos (cena única). |
+| `chapters` | sim* | Capítulos (seção 3.7). *Use `timeline` **ou** `chapters`, nunca os dois. |
 
 ### 3.1 Sistema de coordenadas
 
@@ -97,7 +99,80 @@ expressões, gestos, olhares e efeitos — sempre a serviço da clareza da hist�
 `orb` (orbe luminoso), `book`, `cup`, `model` (GLTF via `"model": "models/arquivo.glb"`).
 
 Objetos **manipuláveis** (pegar, entregar, largar) devem ser props pequenos (`orb`, `book`, `cup`) criados por
-`SPAWN_OBJECT`. A origem de `orb`/`book`/`cup` é o centro do objeto: no chão use `y` ≈ 0,09 (orb), 0,02 (book), 0,05 (cup).
+`SPAWN_OBJECT`. A origem de `orb`/`book`/`cup` é o centro do objeto: no chão use `y` ≈ 0,09 (orb), 0,02 (book), 0,05 (cup);
+sobre uma mesa (`table`, tampo a 0,78 m) use `y` ≈ 0,8.
+
+**Mobília (interiores):** `table` (1,2 × 0,7 m, tampo a 0,78 m), `chair` (assento a 0,47 m, encosto em −Z local:
+gire 180° para quem senta olhar para −Z), `bookshelf` (1,0 × 1,9 m), `bed` (1,05 × 2,05 m), `rug` (2 × 1,4 m),
+`candle` (vela com luz própria; ponha sobre a mesa com `y` 0,78), `door` (porta avulsa com batente).
+
+### 3.4 Personagens (visual)
+
+Campos opcionais de `object` para atores procedurais:
+
+| Campo | Valores |
+|---|---|
+| `build` | `slim`, `average` (padrão), `athletic`, `heavy` |
+| `hair` | `short` (padrão), `long`, `ponytail`, `bun`, `spiky`, `mohawk`, `bald` |
+| `outfit` | `casual` (padrão), `robe` (túnica longa), `dress` (vestido) |
+| `accessories` | lista com `hat`, `wizardHat`, `cap`, `crown`, `glasses`, `beard`, `mustache`, `scarf`, `backpack`, `cape` |
+| `palette.accent` | cor de chapéu, capa, cachecol e mochila |
+
+Dê a cada personagem uma silhueta própria (cabelo + acessório + cor). A capa balança sozinha ao caminhar.
+
+### 3.5 Ambientes internos (`scene.room`)
+
+```json
+"scene": {
+  "room": { "width": 7, "depth": 6, "height": 2.8, "floor": "wood", "floorColor": "#8a6440", "wallColor": "#c4ae8c",
+            "doors": [ { "wall": "south", "offset": 0 } ], "windows": [ { "wall": "east", "offset": -1 } ] },
+  "lights": [ { "id": "amb", "type": "hemisphere", "color": "#d8c4a4", "groundColor": "#3a2a1a", "intensity": 0.85 },
+              { "id": "teto", "type": "point", "color": "#ffcf8a", "intensity": 7, "position": [0, 2.5, 0], "distance": 11, "castShadow": true } ],
+  "props": [ { "prop": "table", "position": [0, 0, -1] }, { "prop": "chair", "position": [-0.35, 0, -0.3], "rotation": 180 } ]
+}
+```
+
+- O cômodo é centrado na origem: paredes em x = ±width/2 e z = ±depth/2. **Norte = −Z, Sul = +Z, Leste = +X, Oeste = −X.**
+  `offset` desloca a abertura ao longo da parede. `floor`: `wood`, `stone` ou `tiles`. `ceiling` (padrão true).
+- As paredes só aparecem **por dentro**: câmeras fora do cômodo enxergam através delas. Ainda assim, prefira
+  câmeras **dentro** do cômodo (a ≥ 0,4 m das paredes).
+- Interiores não têm sol: declare `lights` (hemisphere suave + 1 point no teto com sombra, ± `spot` entrando pela janela).
+- Sem `ground` explícito não há chão externo; use `background` escuro.
+
+### 3.6 Ciclo dia/noite (`scene.timeOfDay`)
+
+`"timeOfDay": 5.2` (0–24) ativa céu, sol/lua, estrelas e névoa automáticos (não declare `sky`/`fog` nem sol).
+Anime a hora com `SET_TIME_OF_DAY` (seção 4.18). Referências: 5–6 madrugada, 6–7,5 nascer do sol (laranja),
+12 meio-dia, 18–19,5 pôr do sol, 20–4 noite estrelada. Luzes de `scene.lights` somam ao sol (ex.: fogueira).
+
+### 3.7 Capítulos e elenco (`chapters`, `cast`)
+
+Use **capítulos** quando a história muda de lugar ou salta no tempo. Cada capítulo é uma cena completa com seu
+próprio cenário; eles tocam em sequência, com transição em fade e cartela "Capítulo N — título".
+
+```json
+{
+  "meta": { "title": "A Viagem" },
+  "fx": { "retro": true },
+  "cast": {
+    "ana": { "kind": "actor", "name": "Ana", "hair": "ponytail", "accessories": ["backpack"], "voice": { "engine": "speech", "lang": "pt-BR" } }
+  },
+  "chapters": [
+    { "title": "Partida", "scene": { "timeOfDay": 6 }, "timeline": [
+      { "time": 0, "type": "SPAWN_OBJECT", "target": "ana", "position": [0, 0, 0] } ] },
+    { "title": "Chegada", "transition": "fade", "scene": { "room": { "width": 6, "depth": 5 } }, "timeline": [
+      { "time": 0, "type": "SPAWN_OBJECT", "target": "ana", "position": [0, 0, 2], "rotation": [0, 180, 0] } ] }
+  ]
+}
+```
+
+- `cast`: definições reutilizáveis. Um `SPAWN_OBJECT` **sem `object`** cujo `target` esteja no `cast` usa essa definição.
+  Personagens recorrentes devem ficar no `cast`.
+- Cada capítulo tem `title`, `timeline` e opcionalmente `scene`, `fx`, `cameras`, `gestures` (se omitidos, herdam os
+  do topo do script), `duration`, `transition` (`fade` padrão | `cut`) e `showTitle` (padrão true).
+- **Cada capítulo começa do zero**: o `time` dos eventos é relativo ao início do capítulo, e todo ator precisa de
+  `SPAWN_OBJECT` no capítulo em que aparece (posições, poses e objetos segurados não passam de um capítulo para outro).
+- Os 3 primeiros segundos mostram a cartela do título: comece as falas depois de ~2,5 s.
 Props em `scene.props` são estáticos. Props que precisam aparecer/mover usam `SPAWN_OBJECT` com `{"kind": "prop"}`.
 
 ---
@@ -375,6 +450,16 @@ A engine **expande** a interação em eventos primitivos (caminhar até o outro,
 - Para `give`, o objeto precisa estar na mão de quem entrega (via `pickUp` ou `ATTACH_OBJECT`).
 - Interações que movem atores mudam suas posições para o resto da cena; os presets de câmera acompanham.
 
+### 4.18 `SET_TIME_OF_DAY` — passagem do tempo
+
+```json
+{ "time": 0, "type": "SET_TIME_OF_DAY", "hour": 7.6, "duration": 16, "easing": "linear" }
+```
+
+- Exige `scene.timeOfDay`. O tempo sempre avança: de 22 para 2 passa pela meia-noite. `duration` 0 = salto.
+
+---
+
 ## 5. Regras de direção
 
 ### 5.1 Estrutura de uma cena
@@ -460,10 +545,12 @@ Observações:
 
 ## 7. Procedimento de conversão (siga em ordem)
 
-1. **Leia o roteiro** e liste personagens, local, hora do dia, clima emocional e eventos-chave.
-2. **Monte o cenário:** `scene` (céu, névoa, chão, luzes, props) coerente com local/hora.
-3. **Elenco:** um `SPAWN_OBJECT` por personagem, com `palette` distinta, `voice` adequada e
-   posições a 2,5–3,5 m de distância, já girados um para o outro (fórmula do yaw).
+1. **Leia o roteiro** e liste personagens, locais, hora do dia, clima emocional e eventos-chave.
+   Mais de um lugar ou salto de tempo → **capítulos** (seção 3.7) com personagens no `cast`.
+2. **Monte o cenário:** `scene` coerente com local/hora — ao ar livre (`timeOfDay` ou céu/névoa/luzes manuais)
+   ou interior (`room` + mobília + luzes internas).
+3. **Elenco:** visual distinto por personagem (seção 3.4), `voice` adequada; um `SPAWN_OBJECT` por personagem
+   (em cada capítulo), a 2,5–3,5 m de distância, já girados um para o outro (fórmula do yaw).
 4. **Cronometre as falas** com a seção 6, acumulando `time` sequencialmente.
 5. **Câmera:** abertura, campo/contracampo, closes de reação, clímax, encerramento (seção 5.2).
 6. **Atuação:** expressões, gestos, olhares (seção 5.3).
@@ -484,6 +571,9 @@ Observações:
 - [ ] `INTERACT` tem os campos exigidos (`with`/`object`/`position`) e `give`/`putDown` usam um prop que está na mão.
 - [ ] Apenas props em `ATTACH_OBJECT`; poses e articulações com nomes do catálogo.
 - [ ] Atores sentados/ajoelhados recebem `stand` antes de caminhar.
+- [ ] `timeline` **ou** `chapters` (não os dois); cada capítulo com `title` e `timeline`, e spawns próprios.
+- [ ] `SET_TIME_OF_DAY` só com `scene.timeOfDay`; `build`/`hair`/`outfit`/`accessories` com valores do catálogo.
+- [ ] Interiores: câmeras dentro do cômodo e luzes declaradas.
 
 ---
 
@@ -610,3 +700,6 @@ Observações:
 | `apenas props podem ser presos` | `ATTACH_OBJECT` só aceita props como `target`. |
 | `articulação 'x' desconhecida` | Use os nomes da seção 4.13. |
 | Personagem "deslizando" sentado | Faltou `stand` antes do `TRANSFORM_OBJECT`. |
+| `informe 'timeline' (cena única) ou 'chapters'` | Script sem eventos ou com os dois campos. |
+| `defina 'scene.timeOfDay' para usar o ciclo dia/noite` | Adicione `timeOfDay` à cena do capítulo. |
+| `o primeiro SPAWN_OBJECT de 'x' precisa de 'object' (ou de uma entrada em 'cast')` | Defina o personagem no `cast` ou no spawn. |

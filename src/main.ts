@@ -2,15 +2,21 @@ import * as THREE from 'three';
 import { Engine } from './core/Engine';
 import { SceneManager } from './core/SceneManager';
 import { AssetLoader } from './core/AssetLoader';
+import { loadDraft, saveDraft, scriptFromLocation } from './core/ScriptStorage';
 import { Timeline } from './timeline/Timeline';
-import { ActionRegistry, StoryScriptError, type CompiledStory } from './timeline/ActionRegistry';
-import type { ActorObjectDef, FrameState, StoryScript } from './timeline/types';
+import { ActionRegistry, StoryScriptError } from './timeline/ActionRegistry';
+import { compileProject, evaluateProject, type CompiledChapter, type CompiledProject } from './timeline/StoryProject';
+import type { ActiveDialogue, ActorObjectDef, FrameState, StoryScript } from './timeline/types';
 import { CameraDirector } from './systems/CameraDirector';
 import { AudioLipsync } from './systems/AudioLipsync';
 import { PostProcessing } from './systems/PostProcessing';
+import { Recorder } from './systems/Recorder';
 import { ControlPanel } from './ui/ControlPanel';
 import { TimelineEditor } from './ui/TimelineEditor';
-import { DialogueBox } from './ui/DialogueBox';
+import { TimelineView } from './ui/TimelineView';
+import { GeneratorPanel } from './ui/GeneratorPanel';
+import { DialogueBox, type SpeakerInfo } from './ui/DialogueBox';
+import { TitleCard, type TitleCardState } from './ui/TitleCard';
 import { defaultScript } from './config/defaultScript';
 
 /* -------------------------------------------------------------------------- */
@@ -37,25 +43,30 @@ const audio = new AudioLipsync();
 const assets = new AssetLoader(audio.context);
 const director = new CameraDirector(engine.camera, sceneManager);
 const post = new PostProcessing(engine.renderer, sceneManager.scene, engine.camera);
+const recorder = new Recorder(engine.canvas, audio.context, audio.output);
 
-let story: CompiledStory | null = null;
+let project: CompiledProject | null = null;
+let chapter: CompiledChapter | null = null;
+let builtChapter = -1;
 let currentScript: unknown = defaultScript;
 let lastFrame: FrameState | null = null;
+let overlay: { dialogues: ActiveDialogue[]; titleCard: TitleCardState | null } = { dialogues: [], titleCard: null };
 let resumeAfterScrub = false;
 
-const dialogue = new DialogueBox(ui, (actorId) => {
-  const def = story?.objects.get(actorId);
+const speaker = (actorId: string): SpeakerInfo => {
+  const def = chapter?.story.objects.get(actorId);
   return def?.kind === 'actor' ? { name: def.name, color: def.color ?? '#ffffff' } : { name: actorId, color: '#ffffff' };
-});
+};
+
+const titleCard = new TitleCard(ui);
+const dialogue = new DialogueBox(ui, speaker);
 
 const panel = new ControlPanel(ui, {
   onTogglePlay: () => {
     void audio.unlock();
     timeline.toggle();
   },
-  onRestart: () => {
-    timeline.seek(0);
-  },
+  onRestart: () => timeline.seek(0),
   onSeek: (t) => timeline.seek(t),
   onScrubStart: () => {
     resumeAfterScrub = timeline.playing;
@@ -76,55 +87,95 @@ const panel = new ControlPanel(ui, {
     timeline.pause();
     editor.open(currentScript);
   },
+  onToggleRecord: toggleRecording,
+  onOpenGenerator: () => {
+    timeline.pause();
+    void generator.open();
+  },
+  onToggleTracks: () => {
+    if (isScript(currentScript)) tracks.toggle(currentScript, chapter?.index ?? 0);
+  },
 });
 
 const editor = new TimelineEditor(ui, {
-  onApply: async (raw) => {
-    const errors = await loadStory(raw);
-    if (!errors.length) currentScript = raw;
-    return errors;
-  },
+  onApply: (raw) => applyScript(raw),
   getDefault: () => defaultScript,
 });
+
+const tracks = new TimelineView(ui, {
+  onChange: (script) => loadStory(script, { keepTime: timeline.time, persist: true, fromTracks: true }),
+  onSeek: (index, local) => {
+    const c = project?.chapters[index];
+    if (c) timeline.seek(c.start + local);
+  },
+  onOpen: () => timeline.pause(),
+});
+
+const generator = new GeneratorPanel(ui, {
+  validate: (script) => {
+    try {
+      compileProject(registry, script);
+      return [];
+    } catch (err) {
+      return err instanceof StoryScriptError ? err.errors : [err instanceof Error ? err.message : String(err)];
+    }
+  },
+  onScript: async (script) => {
+    const errors = await applyScript(script);
+    if (errors.length) throw new Error(errors[0]);
+    panel.setStatus('Roteiro gerado pela IA aplicado — aperte ▶ para assistir.');
+  },
+});
+
+function isScript(v: unknown): v is StoryScript {
+  return typeof v === 'object' && v !== null && 'meta' in v;
+}
 
 /* -------------------------------------------------------------------------- */
 /*  Carregamento de histórias                                                 */
 /* -------------------------------------------------------------------------- */
 
-/** Valida, carrega assets, compila e monta a cena. Retorna erros (vazio = ok). */
-async function loadStory(raw: unknown): Promise<string[]> {
-  const structural = registry.validateStructure(raw);
-  if (structural.length) return structural;
-  const script = raw as StoryScript;
+async function applyScript(raw: unknown): Promise<string[]> {
+  const errors = await loadStory(raw, { persist: true });
+  if (!errors.length && isScript(raw) && tracks.isOpen) tracks.setScript(raw, 0);
+  return errors;
+}
 
+interface LoadOptions {
+  /** Mantém a posição da timeline (ex.: edição nas trilhas). */
+  keepTime?: number;
+  /** Salva como rascunho local se der certo. */
+  persist?: boolean;
+  fromTracks?: boolean;
+}
+
+/** Valida, carrega assets e compila todos os capítulos. Retorna erros (vazio = ok). */
+async function loadStory(raw: unknown, options: LoadOptions = {}): Promise<string[]> {
+  if (!isScript(raw)) return ['o StoryScript deve ser um objeto JSON com "meta"'];
   timeline.pause();
   try {
     panel.setStatus('Carregando assets…');
-    const result = await assets.preload(AssetLoader.manifestOf(script), (p) => {
+    const result = await assets.preload(AssetLoader.manifestOf(raw), (p) => {
       if (p.total) panel.setStatus(`Carregando assets ${p.loaded}/${p.total}…`);
     });
     for (const [url, buffer] of assets.loadedAudio()) audio.registerBuffer(url, buffer);
 
-    const compiled = registry.compile(script, {
+    const compiled = compileProject(registry, raw, {
       speechDuration: (ev, actor) => audio.durationFor(ev, actor),
       soundDuration: (src) => audio.soundDuration(src),
     });
     compiled.warnings.forEach((w) => console.warn(`[StoryScript] ${w}`));
 
-    const actors: [string, ActorObjectDef][] = [];
-    for (const [id, def] of compiled.objects) if (def.kind === 'actor') actors.push([id, def]);
-    audio.configureActors(actors);
-    sceneManager.build(compiled, assets);
-    director.setShots(compiled.shots.values());
-    dialogue.clear();
-
-    story = compiled;
+    project = compiled;
+    builtChapter = -1; // força reconstruir a cena do capítulo atual
+    currentScript = raw;
     timeline.setDuration(compiled.duration);
-    timeline.setLoop(script.meta.loop ?? false);
-    timeline.seek(0);
-    panel.setTitle(script.meta.title);
+    timeline.setLoop(raw.meta.loop ?? false);
+    timeline.seek(Math.min(options.keepTime ?? 0, compiled.duration));
+    panel.setTitle(raw.meta.title);
     panel.setMarkers(compiled.markers, compiled.duration);
     panel.setStatus(result.failed.length ? `Assets ausentes (fallback procedural): ${result.failed.join(', ')}` : null);
+    if (options.persist) saveDraft(raw);
     return [];
   } catch (err) {
     const errors = err instanceof StoryScriptError ? err.errors : [err instanceof Error ? err.message : String(err)];
@@ -134,6 +185,63 @@ async function loadStory(raw: unknown): Promise<string[]> {
   }
 }
 
+/** Monta a cena de um capítulo (quando o tempo entra num capítulo diferente). */
+function ensureChapter(next: CompiledChapter): void {
+  chapter = next;
+  if (next.index === builtChapter) return;
+  const actors: [string, ActorObjectDef][] = [];
+  for (const [id, def] of next.story.objects) if (def.kind === 'actor') actors.push([id, def]);
+  audio.configureActors(actors);
+  sceneManager.build(next.story, assets);
+  director.setShots(next.story.shots.values());
+  sceneManager.prewarm(engine.renderer, engine.camera);
+  dialogue.clear();
+  builtChapter = next.index;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Gravação                                                                  */
+/* -------------------------------------------------------------------------- */
+
+async function toggleRecording(): Promise<boolean> {
+  if (recorder.recording) {
+    await finishRecording();
+    return false;
+  }
+  if (!Recorder.supported()) {
+    panel.setStatus('Este navegador não suporta gravação (MediaRecorder).', 'error');
+    return false;
+  }
+  await audio.unlock();
+  const usesSpeech = project?.chapters.some((c) =>
+    [...c.story.objects.values()].some((d) => d.kind === 'actor' && (d.voice?.engine ?? 'speech') === 'speech'),
+  );
+  timeline.pause();
+  timeline.seek(0);
+  recorder.start(30);
+  timeline.play();
+  panel.setStatus(
+    usesSpeech
+      ? '● Gravando… (vozes "speech" do navegador não entram no arquivo; use "babble" ou arquivos de áudio)'
+      : '● Gravando… o vídeo será baixado ao final.',
+  );
+  return true;
+}
+
+async function finishRecording(): Promise<void> {
+  timeline.pause();
+  const blob = await recorder.stop();
+  panel.setRecording(false);
+  if (blob && blob.size > 0) {
+    Recorder.download(blob, project?.script.meta.title ?? 'polytale');
+    panel.setStatus(`Vídeo salvo (${(blob.size / 1024 / 1024).toFixed(1)} MB).`);
+  } else panel.setStatus('Gravação vazia.', 'error');
+}
+
+timeline.on('end', () => {
+  if (recorder.recording) void finishRecording();
+});
+
 /* -------------------------------------------------------------------------- */
 /*  Loop                                                                      */
 /* -------------------------------------------------------------------------- */
@@ -141,32 +249,41 @@ async function loadStory(raw: unknown): Promise<string[]> {
 const cameraPosition = new THREE.Vector3();
 
 engine.onUpdate((dt, elapsed) => {
-  if (!story) return;
+  if (!project) return;
 
-  // 1. Relógio mestre -> estado determinístico da cena.
+  // 1. Relógio mestre -> capítulo ativo + estado determinístico da cena.
   timeline.update(dt);
-  const frame = registry.evaluate(story, timeline.time);
+  const pf = evaluateProject(registry, project, timeline.time);
+  ensureChapter(pf.chapter);
+  const frame = pf.frame;
   lastFrame = frame;
 
-  // 2. Timeline -> objetos/luzes.
+  // 2. Timeline -> objetos/luzes/céu.
   sceneManager.applyFrame(frame);
 
   // 3. Áudio alinhado à timeline + análise FFT/RMS.
   audio.sync(frame, timeline.playing, timeline.rate, timeline.discontinuity);
   audio.update(dt, frame, timeline.playing);
 
-  // 4. Vida procedural dos atores (respiração, piscar, olhar, lipsync).
+  // 4. Vida procedural dos atores (respiração, piscar, olhar, poses, IK, lipsync).
   sceneManager.update(dt, frame, (id) => audio.getState(id), director.getPosition(cameraPosition));
 
   // 5. Câmera, efeitos e UI.
   director.apply(frame);
   post.applyFrame(frame.fx, elapsed);
   dialogue.render(frame.dialogues);
+  titleCard.render(pf.titleCard);
+  overlay = { dialogues: frame.dialogues, titleCard: pf.titleCard };
   panel.update(timeline.snapshot(), engine.fps);
+  tracks.setPlayhead(pf.chapter.index, frame.time);
 });
 
 engine.onResize((w, h) => post.setSize(w, h));
-engine.setRenderer((dt) => post.render(dt));
+engine.setRenderer((dt) => {
+  post.render(dt);
+  // Copiado logo após o render (antes do navegador limpar o buffer WebGL).
+  recorder.captureFrame({ ...overlay, speaker });
+});
 
 /* -------------------------------------------------------------------------- */
 /*  Bootstrap                                                                 */
@@ -183,9 +300,13 @@ declare global {
       audio: AudioLipsync;
       post: PostProcessing;
       director: CameraDirector;
+      recorder: Recorder;
       loadStory: (raw: unknown) => Promise<string[]>;
       frame: () => FrameState | null;
-      story: () => CompiledStory | null;
+      project: () => CompiledProject | null;
+      chapter: () => CompiledChapter | null;
+      /** Compatibilidade: história do capítulo atual. */
+      story: () => CompiledChapter['story'] | null;
     };
   }
 }
@@ -198,19 +319,38 @@ window.narrative = {
   audio,
   post,
   director,
-  loadStory,
+  recorder,
+  loadStory: (raw) => loadStory(raw),
   frame: () => lastFrame,
-  story: () => story,
+  project: () => project,
+  chapter: () => chapter,
+  story: () => chapter?.story ?? null,
 };
 
-engine.start();
-void loadStory(defaultScript).then((errors) => {
-  if (errors.length) {
-    panel.setStatus(`Erro no script padrão: ${errors[0]}`, 'error');
-    return;
+/** Ordem: roteiro do link (#story=) > último rascunho deste navegador > demo. */
+async function bootstrap(): Promise<void> {
+  engine.start();
+  const fromLink = await scriptFromLocation();
+  const candidates: [unknown, string][] = [];
+  if (fromLink) candidates.push([fromLink, 'link']);
+  const draft = loadDraft();
+  if (draft && !fromLink) candidates.push([draft, 'rascunho']);
+  candidates.push([defaultScript, 'demo']);
+
+  for (const [raw, source] of candidates) {
+    const errors = await loadStory(raw);
+    if (!errors.length) {
+      const title = isScript(raw) ? raw.meta.title : 'Polytale';
+      if (source === 'rascunho') panel.setStatus('Último roteiro editado restaurado (Restaurar demo no editor volta ao original).');
+      panel.showStartScreen(title, () => {
+        void audio.unlock();
+        timeline.play();
+      });
+      return;
+    }
+    console.warn(`[bootstrap] roteiro do ${source} inválido:`, errors);
+    if (source === 'demo') panel.setStatus(`Erro no script padrão: ${errors[0]}`, 'error');
   }
-  panel.showStartScreen(defaultScript.meta.title, () => {
-    void audio.unlock();
-    timeline.play();
-  });
-});
+}
+
+void bootstrap();

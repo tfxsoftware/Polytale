@@ -16,6 +16,7 @@ import {
   type Socket,
 } from '../timeline/types';
 import { restPoseFrame, sampleGesture } from '../timeline/poses';
+import { addAccessories, addHair, addOutfit, buildProportions } from './CharacterStyle';
 import type { LipsyncState } from '../systems/AudioLipsync';
 import { applyPS1VertexSnap } from '../systems/PostProcessing';
 import { DEG2RAD, clamp, clamp01, damp, fbm1D, hashString, lerp, seededRandom, smoothstep } from '../utils/math';
@@ -265,6 +266,8 @@ interface ProceduralRig extends RigCommon {
   legL: Limb;
   legR: Limb;
   chestBaseY: number;
+  /** Pivô da capa (acessório), animado pela caminhada. */
+  cape: THREE.Object3D | null;
 }
 
 interface GltfRig extends RigCommon {
@@ -359,6 +362,11 @@ function buildProceduralRig(def: ActorObjectDef): ProceduralRig {
   const mShirt = lambert(p.shirt ?? '#3f6fb5');
   const mPants = lambert(p.pants ?? '#2d2d3a');
   const mShoes = lambert(p.shoes ?? '#1c1410');
+  const accentColor = p.accent ?? '#8a2b2b';
+  const mAccent = lambert(accentColor);
+  const mAccentDouble = lambert(accentColor);
+  mAccentDouble.side = THREE.DoubleSide;
+  const pr = buildProportions(def.build);
 
   const body = new THREE.Group();
   body.name = 'body';
@@ -367,7 +375,7 @@ function buildProceduralRig(def: ActorObjectDef): ProceduralRig {
   const hips = new THREE.Group();
   hips.position.y = 0.92;
   body.add(hips);
-  hips.add(part(new THREE.BoxGeometry(0.34, 0.16, 0.21), mPants, 0.02));
+  hips.add(part(new THREE.BoxGeometry(0.34 * pr.hipWidth, 0.16, 0.21 * pr.depth), mPants, 0.02));
 
   const foot = () => {
     const g = new THREE.BoxGeometry(0.11, 0.07, 0.2);
@@ -375,22 +383,24 @@ function buildProceduralRig(def: ActorObjectDef): ProceduralRig {
     return part(g, mShoes);
   };
   const { thigh, shin, upperArm, forearm } = PROCEDURAL_RIG;
-  const legL = buildLimb(hips, new THREE.Vector3(0.09, -0.03, 0), thigh, shin, 0.068, 0.058, mPants, mPants, foot());
-  const legR = buildLimb(hips, new THREE.Vector3(-0.09, -0.03, 0), thigh, shin, 0.068, 0.058, mPants, mPants, foot());
+  const legX = 0.09 * pr.hipWidth;
+  const legL = buildLimb(hips, new THREE.Vector3(legX, -0.03, 0), thigh, shin, 0.068 * pr.limb, 0.058 * pr.limb, mPants, mPants, foot());
+  const legR = buildLimb(hips, new THREE.Vector3(-legX, -0.03, 0), thigh, shin, 0.068 * pr.limb, 0.058 * pr.limb, mPants, mPants, foot());
 
   // Tronco (peito respira)
   const chest = new THREE.Group();
   const chestBaseY = 0.08;
   chest.position.y = chestBaseY;
   hips.add(chest);
-  chest.add(part(new THREE.CylinderGeometry(0.21, 0.17, 0.52, 6).translate(0, 0.26, 0), mShirt));
+  chest.add(part(new THREE.CylinderGeometry(pr.chestTop, pr.chestBottom, 0.52, 6).translate(0, 0.26, 0).scale(1, 1, pr.depth), mShirt));
   const chestCenter = new THREE.Object3D();
   chestCenter.position.y = 0.3;
   chest.add(chestCenter);
 
   const hand = () => part(new THREE.BoxGeometry(0.075, 0.09, 0.06).translate(0, -0.045, 0), mSkin);
-  const armL = buildLimb(chest, new THREE.Vector3(0.26, 0.47, 0), upperArm, forearm, 0.052, 0.046, mShirt, mSkin, hand());
-  const armR = buildLimb(chest, new THREE.Vector3(-0.26, 0.47, 0), upperArm, forearm, 0.052, 0.046, mShirt, mSkin, hand());
+  const shoulderX = (pr.chestTop + 0.05) * pr.shoulders;
+  const armL = buildLimb(chest, new THREE.Vector3(shoulderX, 0.47, 0), upperArm, forearm, 0.052 * pr.limb, 0.046 * pr.limb, mShirt, mSkin, hand());
+  const armR = buildLimb(chest, new THREE.Vector3(-shoulderX, 0.47, 0), upperArm, forearm, 0.052 * pr.limb, 0.046 * pr.limb, mShirt, mSkin, hand());
   // Centro da mão: efetor do IK e encaixe para objetos segurados.
   const handL = socket(armL.lower, 'handL', 0, -(forearm + 0.045), 0.01);
   const handR = socket(armR.lower, 'handR', 0, -(forearm + 0.045), 0.01);
@@ -410,11 +420,6 @@ function buildProceduralRig(def: ActorObjectDef): ProceduralRig {
   const HC = 0.21; // centro da cabeça acima do pivô
   const FRONT = 0.19; // face frontal (z)
   head.add(part(new THREE.BoxGeometry(0.4, 0.42, 0.38), mSkin, HC));
-  // Cabelo
-  head.add(part(new THREE.BoxGeometry(0.43, 0.11, 0.41), mHair, HC + 0.2));
-  const back = part(new THREE.BoxGeometry(0.43, 0.3, 0.08), mHair, HC + 0.06);
-  back.position.z = -0.175;
-  head.add(back);
   // Nariz
   const nose = part(new THREE.BoxGeometry(0.04, 0.06, 0.035), mSkin, HC - 0.03);
   nose.position.z = FRONT + 0.015;
@@ -459,6 +464,24 @@ function buildProceduralRig(def: ActorObjectDef): ProceduralRig {
   mouth.name = 'mouth';
   face.add(mouth);
 
+  // Visual: cabelo, roupa e acessórios.
+  const style = {
+    head,
+    face,
+    neck,
+    chest,
+    hips,
+    headCenter: HC,
+    front: FRONT,
+    proportions: pr,
+    materials: { hair: mHair, shirt: mShirt, accent: mAccent, accentDouble: mAccentDouble, metal: lambert('#d4a93a'), dark: lambert('#2a2420') },
+    part: (geo: THREE.BufferGeometry, mat: THREE.Material, y = 0) => part(geo, mat, y),
+    faceMaterial,
+  };
+  addHair(style, def.hair);
+  addOutfit(style, def.outfit);
+  const { cape } = addAccessories(style, def.accessories);
+
   const sockets: Record<Socket, THREE.Object3D> = {
     handL,
     handR,
@@ -496,6 +519,7 @@ function buildProceduralRig(def: ActorObjectDef): ProceduralRig {
     headCenter,
     chestCenter,
     chestBaseY,
+    cape,
     joints,
     arms: { left: { upper: armL.upper, lower: armL.lower, end: handL }, right: { upper: armR.upper, lower: armR.lower, end: handR } },
     sockets,
@@ -1085,6 +1109,7 @@ export class Actor {
     rig.armL.upper.position.y = 0.47 + shoulderLift + breath * 0.004;
     rig.armR.upper.position.y = 0.47 + shoulderLift + breath * 0.004;
     rig.chest.rotation.x += spineBow;
+    if (rig.cape) rig.cape.rotation.set(0.1 + w * 0.55 + fbm1D(t * 0.9, (this.seed % 19) + 2) * 0.06 - expr.slump * 0.05, 0, 0);
 
     // ---- Cabeça: LookAt amortecido com ruído + gestos + fala ----
     let targetYaw = fbm1D(t * 0.15, (this.seed % 29) + 3) * 0.15;

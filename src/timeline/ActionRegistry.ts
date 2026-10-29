@@ -1,5 +1,9 @@
 import {
+  ACCESSORIES,
+  BODY_BUILDS,
   BODY_PARTS,
+  HAIR_STYLES,
+  OUTFITS,
   CAMERA_PRESETS,
   SOCKETS,
   DEFAULT_RETRO_SETTINGS,
@@ -249,6 +253,7 @@ function cloneFrame(f: FrameState, time: number): FrameState {
     camera: f.camera,
     shakes: [],
     fx: { ...f.fx, settings: { ...f.fx.settings } },
+    hour: f.hour,
     dialogues: [],
     sounds: [],
   };
@@ -376,6 +381,21 @@ function isReachTarget(v: unknown, ctx: CompileContext): string[] {
   return errs;
 }
 
+function validateActorStyle(def: ActorObjectDef): string[] {
+  const errs: string[] = [];
+  const oneOf = (field: string, value: unknown, list: readonly string[]) => {
+    if (value !== undefined && !list.includes(String(value))) errs.push(`'object.${field}' inválido (use ${list.join(', ')})`);
+  };
+  oneOf('build', def.build, BODY_BUILDS);
+  oneOf('hair', def.hair, HAIR_STYLES);
+  oneOf('outfit', def.outfit, OUTFITS);
+  if (def.accessories !== undefined) {
+    if (!Array.isArray(def.accessories)) errs.push(`'object.accessories' deve ser um array`);
+    else for (const a of def.accessories) oneOf('accessories', a, ACCESSORIES);
+  }
+  return errs;
+}
+
 function reachTrack(id: string, hand: Hand, to: ReachTarget | null, shake: number): AnyTrack {
   return track<ReachFrame>({
     channel: `actor:${id}:reach:${hand}`,
@@ -433,11 +453,12 @@ function createDefaultHandlers(): HandlerMap {
       validate(ev, ctx) {
         const errs: string[] = [];
         if (typeof ev.target !== 'string' || !ev.target) errs.push(`'target' (id do objeto) é obrigatório`);
-        else if (!ctx.objects.has(ev.target)) errs.push(`o primeiro SPAWN_OBJECT de '${ev.target}' precisa de 'object'`);
+        else if (!ctx.objects.has(ev.target)) errs.push(`o primeiro SPAWN_OBJECT de '${ev.target}' precisa de 'object' (ou de uma entrada em 'cast')`);
         if (ev.object !== undefined) {
           if (!isObj(ev.object)) errs.push(`'object' deve ser um objeto`);
           else if (ev.object.kind === 'actor') {
             if (typeof ev.object.name !== 'string') errs.push(`'object.name' é obrigatório para atores`);
+            errs.push(...validateActorStyle(ev.object));
           } else if (ev.object.kind === 'prop') {
             if (typeof ev.object.prop !== 'string') errs.push(`'object.prop' é obrigatório para props`);
           } else errs.push(`'object.kind' deve ser 'actor' ou 'prop'`);
@@ -889,6 +910,34 @@ function createDefaultHandlers(): HandlerMap {
       },
     },
 
+    SET_TIME_OF_DAY: {
+      defaultDuration: 0,
+      defaultEasing: 'easeInOutSine',
+      validate(ev, ctx) {
+        const errs: string[] = [];
+        if (!isNum(ev.hour) || ev.hour < 0 || ev.hour > 24) errs.push(`'hour' deve estar entre 0 e 24`);
+        if (typeof ctx.script.scene?.timeOfDay !== 'number') errs.push(`defina 'scene.timeOfDay' para usar o ciclo dia/noite`);
+        return errs;
+      },
+      tracks: (ev) => [
+        track<number | null>({
+          channel: 'env:hour',
+          get: (f) => f.hour,
+          set: (f, v) => {
+            f.hour = v;
+          },
+          interpolate: (a, b, t) => (a === null || b === null ? b : lerp(a, b, t)),
+          // Sempre avança: escolhe o próximo `hour` (mod 24) depois do atual.
+          resolve: (from) => {
+            if (from === null) return ev.hour;
+            let to = ev.hour + Math.floor(from / 24) * 24;
+            while (to < from) to += 24;
+            return to;
+          },
+        }),
+      ],
+    },
+
     FADE_SCREEN: {
       defaultDuration: 1,
       defaultEasing: 'easeInOutSine',
@@ -1069,7 +1118,7 @@ export class ActionRegistry {
       parent?: string;
     }
     let seq = 0;
-    const queue: QueueItem[] = script.timeline
+    const queue: QueueItem[] = (script.timeline ?? [])
       .map((ev, index) => ({ ev, index, seq: 0 }))
       .sort((a, b) => (a.ev?.time ?? 0) - (b.ev?.time ?? 0) || a.index - b.index);
     queue.forEach((q) => (q.seq = seq++));
@@ -1093,9 +1142,10 @@ export class ActionRegistry {
       if (!isObj(ev)) continue;
       if (ev.type !== 'SPAWN_OBJECT' || typeof ev.target !== 'string') continue;
       if (!objects.has(ev.target)) {
-        // Sem 'object' o erro é reportado pela validação do handler.
-        if (isObj(ev.object)) {
-          objects.set(ev.target, ev.object);
+        // Sem 'object' (nem elenco) o erro é reportado pela validação do handler.
+        const def = isObj(ev.object) ? ev.object : script.cast?.[ev.target];
+        if (isObj(def)) {
+          objects.set(ev.target, def);
           firstSpawn.set(ev.target, ev);
         }
       } else if (ev.object) {
@@ -1273,6 +1323,7 @@ export class ActionRegistry {
         flash: 0,
         flashColor: [1, 1, 1],
       },
+      hour: typeof script.scene?.timeOfDay === 'number' ? script.scene.timeOfDay : null,
       dialogues: [],
       sounds: [],
     };

@@ -38,16 +38,22 @@ export class AssetLoader {
   static manifestOf(script: StoryScript): AssetManifest {
     const models = new Set<string>();
     const audio = new Set<string>();
-    for (const p of script.scene?.props ?? []) if (p.prop === 'model' && p.model) models.add(p.model);
-    for (const ev of script.timeline ?? []) {
-      if (!ev || typeof ev !== 'object') continue;
-      if (ev.type === 'SPAWN_OBJECT' && ev.object) {
-        if (ev.object.kind === 'actor' && ev.object.model) models.add(ev.object.model);
-        if (ev.object.kind === 'prop' && ev.object.prop === 'model' && ev.object.model) models.add(ev.object.model);
-      } else if (ev.type === 'PLAY_AUDIO_WITH_LIPSYNC' && ev.audio) {
-        audio.add(ev.audio);
-      } else if (ev.type === 'PLAY_SOUND' && ev.src && !ev.src.startsWith('procedural:')) {
-        audio.add(ev.src);
+    const addObject = (o: unknown) => {
+      const def = o as { kind?: string; model?: string; prop?: string } | undefined;
+      if (!def || typeof def !== 'object' || !def.model) return;
+      if (def.kind === 'actor' || def.prop === 'model') models.add(def.model);
+    };
+    const scenes = [script.scene, ...(script.chapters ?? []).map((c) => c?.scene)];
+    for (const scene of scenes) for (const p of scene?.props ?? []) if (p.prop === 'model' && p.model) models.add(p.model);
+    for (const def of Object.values(script.cast ?? {})) addObject(def);
+
+    const timelines = [script.timeline ?? [], ...(script.chapters ?? []).map((c) => c?.timeline ?? [])];
+    for (const timeline of timelines) {
+      for (const ev of Array.isArray(timeline) ? timeline : []) {
+        if (!ev || typeof ev !== 'object') continue;
+        if (ev.type === 'SPAWN_OBJECT') addObject(ev.object);
+        else if (ev.type === 'PLAY_AUDIO_WITH_LIPSYNC' && ev.audio) audio.add(ev.audio);
+        else if (ev.type === 'PLAY_SOUND' && ev.src && !ev.src.startsWith('procedural:')) audio.add(ev.src);
       }
     }
     return { models: [...models], audio: [...audio], textures: [] };
