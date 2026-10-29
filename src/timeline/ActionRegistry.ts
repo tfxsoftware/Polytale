@@ -335,6 +335,10 @@ export class ActionRegistry {
         retro: script.fx?.retro ?? true,
         settings: { ...DEFAULT_RETRO_SETTINGS, ...(script.fx?.settings ?? {}) },
         grade: script.fx?.grade ?? 'none',
+        dof: script.fx?.dof ? { aperture: script.fx.dof.aperture ?? 0.025, focus: script.fx.dof.focus ?? null } : null,
+        bloom: script.fx?.bloom
+          ? { strength: script.fx.bloom.strength ?? 0.6, radius: script.fx.bloom.radius ?? 0.4, threshold: script.fx.bloom.threshold ?? 0.85 }
+          : null,
         fade: 0,
         fadeColor: [0, 0, 0],
         flash: 0,

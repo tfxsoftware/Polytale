@@ -95,13 +95,24 @@ function requireObject(id: unknown, ctx: CompileContext): string[] {
   return [];
 }
 
+/** Enquadrável pela câmera: ator ou prop (planos de inserção / B-roll). */
+function requireFramable(id: unknown, ctx: CompileContext): string[] {
+  if (typeof id !== 'string') return [`'subject' deve ser o id (string) de um ator ou prop`];
+  if (!ctx.objects.has(id)) return [`'subject': objeto '${id}' nunca é criado (falta SPAWN_OBJECT)`];
+  return [];
+}
+
 function validateShotSpec(ev: CameraShotSpec, ctx: CompileContext): string[] {
   const errs: string[] = [];
   if (ev.shot !== undefined) {
     if (!ctx.shots.has(ev.shot)) errs.push(`plano '${ev.shot}' não existe em 'cameras'`);
   } else if (ev.preset !== undefined) {
     if (!CAMERA_PRESETS.includes(ev.preset)) errs.push(`preset '${ev.preset}' inválido (use ${CAMERA_PRESETS.join(', ')})`);
-    if (ev.subject !== undefined) errs.push(...requireActor(ev.subject, ctx, 'subject'));
+    // 'close_up'/'medium' também enquadram props (planos de inserção); os outros precisam de um ator.
+    if (ev.subject !== undefined) {
+      const propOk = ev.preset === 'close_up' || ev.preset === 'medium';
+      errs.push(...(propOk ? requireFramable(ev.subject, ctx) : requireActor(ev.subject, ctx, 'subject')));
+    }
     if (ev.over !== undefined) errs.push(...requireActor(ev.over, ctx, 'over'));
     if ((ev.preset === 'close_up' || ev.preset === 'medium' || ev.preset === 'over_shoulder') && ev.subject === undefined) {
       errs.push(`preset '${ev.preset}' exige 'subject'`);
@@ -138,6 +149,9 @@ function shotSpecOf(ev: CameraShotSpec): CameraShotSpec {
 }
 
 /* ---- Cobertura automática de câmera (meta.autoCamera) ---- */
+
+/** Quanto tempo um plano de inserção (`cutaway`) fica no ar antes de voltar para quem fala. */
+const INSERT_SECONDS = 1.2;
 
 function resolveAutoCamera(script: StoryScript): Required<AutoCameraDef> | null {
   const raw = script.meta?.autoCamera;
@@ -203,11 +217,23 @@ function autoCoverageOf(ev: PlayAudioWithLipsyncEvent, ctx: CompileContext): Sto
     out.push(spec);
   }
 
-  // Fala longa: um corte de reação no meio, se não colidir com algo escrito à mão.
-  if (listener && speak > auto.maxShotSeconds) {
-    const midTime = ev.time + auto.maxShotSeconds;
+  // No meio da fala: plano de inserção no objeto citado (`cutaway`) ou, em falas longas, reação de quem escuta.
+  const insert = ev.cutaway && ctx.objects.has(ev.cutaway) ? ev.cutaway : null;
+  if (insert || (listener && speak > auto.maxShotSeconds)) {
+    const midTime = ev.time + Math.min(auto.maxShotSeconds, speak * 0.5);
     if (!hasExplicitCameraNear(timeline, midTime, midTime + 0.01)) {
-      out.push({ time: midTime, type: 'CAMERA_CUT', preset: 'medium', subject: listener, label: 'auto-coverage' });
+      out.push({
+        time: midTime,
+        type: 'CAMERA_CUT',
+        preset: insert ? 'close_up' : 'medium',
+        subject: insert ?? listener,
+        label: insert ? 'auto-coverage (insert)' : 'auto-coverage',
+      });
+      // O plano de inserção é rápido: volta para quem fala se ainda sobrar fala.
+      const backTime = midTime + INSERT_SECONDS;
+      if (insert && backTime < ev.time + speak && !hasExplicitCameraNear(timeline, backTime, backTime + 0.01)) {
+        out.push({ time: backTime, type: 'CAMERA_CUT', preset: 'close_up', subject: ev.target, label: 'auto-coverage' });
+      }
     }
   }
 
@@ -420,6 +446,9 @@ export function createDefaultHandlers(): HandlerMap {
         if (ev.audio !== undefined && typeof ev.audio !== 'string') errs.push(`'audio' deve ser uma URL`);
         if (ev.hold !== undefined && (!isNum(ev.hold) || ev.hold < 0)) errs.push(`'hold' deve ser >= 0`);
         if (ev.subtitle !== undefined && typeof ev.subtitle !== 'boolean') errs.push(`'subtitle' deve ser true ou false`);
+        if (ev.cutaway !== undefined && !ctx.objects.has(String(ev.cutaway))) {
+          errs.push(`'cutaway': objeto '${String(ev.cutaway)}' nunca é criado (falta SPAWN_OBJECT)`);
+        }
         return errs;
       },
       expand: (ev, ctx) => autoCoverageOf(ev, ctx),

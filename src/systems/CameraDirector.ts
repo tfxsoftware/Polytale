@@ -7,12 +7,16 @@ import { clamp, DEG2RAD, fbm1D, noise1D } from '../utils/math';
 export interface ActorProvider {
   getActor(id: string): Actor | undefined;
   visibleActors(): Actor[];
+  /** Posição no mundo de um prop (planos de inserção/B-roll). null se o id não for um prop. */
+  propPosition(id: string, out: THREE.Vector3): THREE.Vector3 | null;
 }
 
 export interface CameraPose {
   position: THREE.Vector3;
   quaternion: THREE.Quaternion;
   fov: number;
+  /** Distância até o alvo do plano — usada como foco automático do desfoque de profundidade (fx.dof). */
+  focusDistance: number;
 }
 
 const DEFAULT_FOV = 50;
@@ -40,6 +44,7 @@ export class CameraDirector {
   private readonly tmpC = new THREE.Vector3();
   private readonly lookMatrix = new THREE.Matrix4();
   private readonly cameraPos = new THREE.Vector3();
+  private focusDistance = 3;
 
   constructor(
     private readonly camera: THREE.PerspectiveCamera,
@@ -54,6 +59,11 @@ export class CameraDirector {
   /** Posição atual da câmera (útil como alvo de olhar 'camera'). */
   getPosition(out: THREE.Vector3): THREE.Vector3 {
     return out.copy(this.cameraPos);
+  }
+
+  /** Distância até o alvo do plano atual — foco automático do desfoque de profundidade (fx.dof). */
+  getFocusDistance(): number {
+    return this.focusDistance;
   }
 
   setAspect(aspect: number): void {
@@ -74,6 +84,7 @@ export class CameraDirector {
     }
     this.camera.updateMatrixWorld();
     this.cameraPos.copy(pose.position);
+    this.focusDistance = pose.focusDistance;
   }
 
   /** Resolve recursivamente um CameraValue em pose (Lerp/Slerp entre planos). */
@@ -86,6 +97,7 @@ export class CameraDirector {
       position: a.position.lerp(b.position, t),
       quaternion: a.quaternion.slerp(b.quaternion, t),
       fov: a.fov + (b.fov - a.fov) * t,
+      focusDistance: a.focusDistance + (b.focusDistance - a.focusDistance) * t,
     };
   }
 
@@ -124,8 +136,9 @@ export class CameraDirector {
       position.y += fbm1D(time * 0.28, 13) * h * 0.4;
     }
 
+    const focusDistance = Math.max(0.05, position.distanceTo(target));
     const quaternion = this.lookQuaternion(position, target, roll);
-    return { position, quaternion, fov };
+    return { position, quaternion, fov, focusDistance };
   }
 
   /** Deriva contínua desde o início do plano: `push` aproxima do alvo, `pan` orbita em torno dele. */
@@ -176,7 +189,12 @@ export class CameraDirector {
     switch (preset) {
       case 'close_up':
       case 'medium': {
-        if (!subject) return this.wide(spec);
+        // Sem ator: se o `subject` for um prop, vira plano de inserção (B-roll) sobre o objeto.
+        if (!subject) {
+          const prop = spec.subject ? this.actors.propPosition(spec.subject, new THREE.Vector3()) : null;
+          if (prop) return this.insert(prop, preset === 'close_up' ? 0.75 : 1.5, sideSign);
+          return this.wide(spec);
+        }
         const close = preset === 'close_up';
         const head = subject.getHeadWorldPosition(new THREE.Vector3());
         // Mira abaixo do rosto: a cabeça fica no terço superior (espaço para legendas).
@@ -287,6 +305,24 @@ export class CameraDirector {
   }
 
   /** Plano geral: enquadra todos os atores visíveis (ou o sujeito). */
+  /**
+   * Plano de inserção (B-roll): enquadra um ponto/objeto de perto, levemente de cima.
+   * Props não têm "frente", então a câmera vem do lado onde a câmera atual já está —
+   * assim o corte não "pula a linha".
+   */
+  private insert(point: THREE.Vector3, dist: number, sideSign: number): { position: THREE.Vector3; target: THREE.Vector3; fov: number } {
+    const dir = this.tmpB.subVectors(this.cameraPos, point).setY(0);
+    if (dir.lengthSq() < 1e-4) dir.set(0, 0, 1);
+    dir.normalize();
+    const right = this.tmpC.crossVectors(UP, dir).normalize();
+    const position = point
+      .clone()
+      .addScaledVector(dir, dist)
+      .addScaledVector(right, sideSign * dist * 0.25)
+      .add(new THREE.Vector3(0, dist * 0.45, 0));
+    return { position, target: point.clone(), fov: 40 };
+  }
+
   private wide(spec: CameraShotSpec): { position: THREE.Vector3; target: THREE.Vector3; fov: number } {
     const subject = spec.subject ? this.actors.getActor(spec.subject) : undefined;
     const group = subject ? [subject] : this.actors.visibleActors();

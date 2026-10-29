@@ -34,6 +34,13 @@ interface RigCommon {
   sockets: Record<Socket, THREE.Object3D>;
 }
 
+/** Rosto-tela (headShape 'screen'): olhos/boca desenhados num canvas emissivo, sem morphs. */
+export interface ScreenFaceRig {
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  texture: THREE.CanvasTexture;
+}
+
 export interface ProceduralRig extends RigCommon {
   kind: 'procedural';
   hips: THREE.Group;
@@ -42,6 +49,8 @@ export interface ProceduralRig extends RigCommon {
   head: THREE.Group;
   eyes: THREE.Group[];
   pupils: THREE.Object3D[];
+  /** Só quando headShape = 'screen'. */
+  screenFace: ScreenFaceRig | null;
   armL: Limb;
   armR: Limb;
   legL: Limb;
@@ -94,6 +103,29 @@ function faceMaterial(color: THREE.ColorRepresentation, offset: number): THREE.M
   });
   applyPS1VertexSnap(m);
   return m;
+}
+
+/** Visor emissivo no lugar de olhos/boca procedurais; Actor redesenha o canvas a cada quadro. */
+function buildScreenFace(face: THREE.Object3D, faceZ: (x: number, y: number, hw: number, hh: number) => number): ScreenFaceRig {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 112;
+  const ctx = canvas.getContext('2d')!;
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  texture.generateMipmaps = false;
+  texture.colorSpace = THREE.SRGBColorSpace;
+
+  const visor = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.3, 0.26),
+    // `toneMapped: false` mantém o brilho do visor independente da luz da cena.
+    new THREE.MeshBasicMaterial({ map: texture, toneMapped: false }),
+  );
+  visor.position.set(0, 0.015, faceZ(0, 0.015, 0.15, 0.13) + 0.002);
+  visor.name = 'screenFace';
+  face.add(visor);
+  return { canvas, ctx, texture };
 }
 
 function part(geo: THREE.BufferGeometry, mat: THREE.Material, y = 0): THREE.Mesh {
@@ -220,47 +252,53 @@ export function buildProceduralRig(def: ActorObjectDef, assets?: AssetLoader): P
 
   const eyes: THREE.Group[] = [];
   const pupils: THREE.Object3D[] = [];
-  const lidColor = skin.clone().multiplyScalar(0.82);
-  for (const side of [1, -1] as const) {
-    // Olho + pálpebra (que cobre de -0.056 a +0.07 em torno do olho) ficam por cima da superfície.
-    const eyeZ = faceZ(side * 0.088, 0.035, 0.065, 0.07);
-    const eye = new THREE.Group();
-    eye.position.set(side * 0.088, 0.035, eyeZ + 0.002);
-    face.add(eye);
-    eye.add(new THREE.Mesh(new THREE.CircleGeometry(0.05, 10), faceMaterial('#f4f1e8', 1)));
-    const pupil = new THREE.Mesh(new THREE.CircleGeometry(0.024, 8), faceMaterial(p.eyes ?? '#1d1a2a', 2));
-    pupil.position.z = 0.001;
-    eye.add(pupil);
-    eyes.push(eye);
-    pupils.push(pupil);
+  let screenFace: ScreenFaceRig | null = null;
 
-    const lid = new THREE.Mesh(createEyelidGeometry(), faceMaterial(lidColor, 3));
-    lid.position.set(side * 0.088, 0.035, eyeZ + 0.004);
-    lid.name = 'eyelid';
-    face.add(lid);
+  if (def.headShape === 'screen') {
+    screenFace = buildScreenFace(face, faceZ);
+  } else {
+    const lidColor = skin.clone().multiplyScalar(0.82);
+    for (const side of [1, -1] as const) {
+      // Olho + pálpebra (que cobre de -0.056 a +0.07 em torno do olho) ficam por cima da superfície.
+      const eyeZ = faceZ(side * 0.088, 0.035, 0.065, 0.07);
+      const eye = new THREE.Group();
+      eye.position.set(side * 0.088, 0.035, eyeZ + 0.002);
+      face.add(eye);
+      eye.add(new THREE.Mesh(new THREE.CircleGeometry(0.05, 10), faceMaterial('#f4f1e8', 1)));
+      const pupil = new THREE.Mesh(new THREE.CircleGeometry(0.024, 8), faceMaterial(p.eyes ?? '#1d1a2a', 2));
+      pupil.position.z = 0.001;
+      eye.add(pupil);
+      eyes.push(eye);
+      pupils.push(pupil);
 
-    const brow = new THREE.Mesh(createBrowGeometry(side), faceMaterial(p.hair ?? '#3b2a1a', 3));
-    brow.position.set(side * 0.088, 0.115, faceZ(side * 0.088, 0.115, 0.05, 0.035) + 0.004);
-    brow.rotation.z = side * -0.06;
-    face.add(brow);
-  }
+      const lid = new THREE.Mesh(createEyelidGeometry(), faceMaterial(lidColor, 3));
+      lid.position.set(side * 0.088, 0.035, eyeZ + 0.004);
+      lid.name = 'eyelid';
+      face.add(lid);
 
-  const mouth = new THREE.Mesh(createMouthGeometry(), faceMaterial('#4a1218', 2));
-  // Aberta, a boca desce até ~-0.2 e alarga até ±0.09.
-  mouth.position.set(0, -0.105, faceZ(0, -0.13, 0.09, 0.07) + 0.003);
-  mouth.name = 'mouth';
-  face.add(mouth);
+      const brow = new THREE.Mesh(createBrowGeometry(side), faceMaterial(p.hair ?? '#3b2a1a', 3));
+      brow.position.set(side * 0.088, 0.115, faceZ(side * 0.088, 0.115, 0.05, 0.035) + 0.004);
+      brow.rotation.z = side * -0.06;
+      face.add(brow);
+    }
 
-  // Rosto pintado (opcional): atrás dos olhos/boca procedurais, que continuam na frente e animando.
-  const faceTexture = assets?.getTexture(p.faceTexture);
-  if (faceTexture) {
-    const paint = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.34, 0.32),
-      new THREE.MeshLambertMaterial({ map: faceTexture, transparent: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }),
-    );
-    paint.position.set(0, -0.01, faceZ(0, -0.01, 0.17, 0.16) + 0.001);
-    paint.name = 'facePaint';
-    face.add(paint);
+    const mouth = new THREE.Mesh(createMouthGeometry(), faceMaterial('#4a1218', 2));
+    // Aberta, a boca desce até ~-0.2 e alarga até ±0.09.
+    mouth.position.set(0, -0.105, faceZ(0, -0.13, 0.09, 0.07) + 0.003);
+    mouth.name = 'mouth';
+    face.add(mouth);
+
+    // Rosto pintado (opcional): atrás dos olhos/boca procedurais, que continuam na frente e animando.
+    const faceTexture = assets?.getTexture(p.faceTexture);
+    if (faceTexture) {
+      const paint = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.34, 0.32),
+        new THREE.MeshLambertMaterial({ map: faceTexture, transparent: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }),
+      );
+      paint.position.set(0, -0.01, faceZ(0, -0.01, 0.17, 0.16) + 0.001);
+      paint.name = 'facePaint';
+      face.add(paint);
+    }
   }
 
   // Visual: cabelo, roupa e acessórios.
@@ -320,6 +358,7 @@ export function buildProceduralRig(def: ActorObjectDef, assets?: AssetLoader): P
     head,
     eyes,
     pupils,
+    screenFace,
     armL,
     armR,
     legL,

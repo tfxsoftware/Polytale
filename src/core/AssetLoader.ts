@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import type { StoryScript } from '../timeline/types';
+import { isVideoSrc, LIGHT_COOKIE_PRESETS, type StoryScript } from '../timeline/types';
 
 export interface AssetManifest {
   models: string[];
@@ -41,13 +41,21 @@ export class AssetLoader {
     const audio = new Set<string>();
     const textures = new Set<string>();
     const addObject = (o: unknown) => {
-      const def = o as { kind?: string; model?: string; prop?: string; palette?: { faceTexture?: string } } | undefined;
+      const def = o as
+        | { kind?: string; model?: string; prop?: string; palette?: { faceTexture?: string }; screen?: { src?: string } }
+        | undefined;
       if (!def || typeof def !== 'object') return;
       if (def.model && (def.kind === 'actor' || def.prop === 'model')) models.add(def.model);
       if (def.kind === 'actor' && def.palette?.faceTexture) textures.add(def.palette.faceTexture);
+      if (def.prop === 'screen' && def.screen?.src && !isVideoSrc(def.screen.src)) textures.add(def.screen.src);
     };
     const scenes = [script.scene, ...(script.chapters ?? []).map((c) => c?.scene)];
-    for (const scene of scenes) for (const p of scene?.props ?? []) if (p.prop === 'model' && p.model) models.add(p.model);
+    for (const scene of scenes) {
+      for (const p of scene?.props ?? []) addObject(p);
+      for (const l of scene?.lights ?? []) {
+        if (l.cookie && !(LIGHT_COOKIE_PRESETS as readonly string[]).includes(l.cookie)) textures.add(l.cookie);
+      }
+    }
     for (const def of Object.values(script.cast ?? {})) addObject(def);
 
     const timelines = [script.timeline ?? [], ...(script.chapters ?? []).map((c) => c?.timeline ?? [])];
@@ -155,7 +163,8 @@ export class AssetLoader {
     return this.resolvedAudio.entries();
   }
 
-  private resolve(url: string): string {
+  /** Resolve uma URL relativa à base do app (usado também por vídeos de tela, que não passam pelo preload). */
+  resolve(url: string): string {
     if (/^(https?:|data:|blob:|\/)/.test(url)) return url;
     return `${this.baseUrl.replace(/\/?$/, '/')}${url.replace(/^\.\//, '')}`;
   }

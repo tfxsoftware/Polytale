@@ -371,6 +371,10 @@
         "flicker": {
           "type": "number",
           "description": "Oscilação procedural de intensidade (0..1) — ex.: chama de fogueira."
+        },
+        "cookie": {
+          "type": "string",
+          "description": "Padrão projetado (gobo/cookie), só para 'spot': `'blinds' | 'window' | 'leaves'` (gerados por procedimento) ou a URL de uma imagem própria."
         }
       },
       "required": [
@@ -414,6 +418,9 @@
         "particles": {
           "$ref": "#/definitions/ParticlesDef"
         },
+        "screen": {
+          "$ref": "#/definitions/ScreenDef"
+        },
         "position": {
           "$ref": "#/definitions/Vec3"
         },
@@ -454,7 +461,8 @@
         "book",
         "cup",
         "model",
-        "particles"
+        "particles",
+        "screen"
       ]
     },
     "ParticlesDef": {
@@ -481,6 +489,41 @@
         "smoke",
         "dust",
         "sparks"
+      ]
+    },
+    "ScreenDef": {
+      "type": "object",
+      "properties": {
+        "src": {
+          "type": "string"
+        },
+        "width": {
+          "type": "number",
+          "description": "Metros. Padrão 1.6 × 0.9 (16:9)."
+        },
+        "height": {
+          "type": "number"
+        },
+        "loop": {
+          "type": "boolean",
+          "description": "Só para vídeo. Padrão true."
+        },
+        "effect": {
+          "$ref": "#/definitions/ScreenEffect"
+        }
+      },
+      "required": [
+        "src"
+      ],
+      "additionalProperties": false,
+      "description": "Apenas para prop = 'screen'. Tela/monitor que mostra uma imagem ou vídeo (detectado pela extensão: .mp4/.webm/.ogg tocam como vídeo, o resto como imagem estática). Limitação: vídeo toca em loop por conta própria, fora do controle do relógio da história (como a voz nativa do navegador) — não é capturado pela exportação nem reversível no seek."
+    },
+    "ScreenEffect": {
+      "type": "string",
+      "enum": [
+        "lcd",
+        "dots",
+        "crt"
       ]
     },
     "RoomDef": {
@@ -606,6 +649,13 @@
         "grade": {
           "$ref": "#/definitions/ColorGrade",
           "description": "Correção de cor independente do retro FX (também funciona com ele desligado). Padrão 'none'."
+        },
+        "dof": {
+          "$ref": "#/definitions/DofDef",
+          "description": "Presença = ligado; campos opcionais usam os padrões."
+        },
+        "bloom": {
+          "$ref": "#/definitions/BloomDef"
         }
       },
       "additionalProperties": false
@@ -618,6 +668,40 @@
         "cool",
         "noir"
       ]
+    },
+    "DofDef": {
+      "type": "object",
+      "properties": {
+        "aperture": {
+          "type": "number",
+          "description": "Abertura: quanto maior, mais forte o desfoque fora de foco. Padrão 0.025."
+        },
+        "focus": {
+          "type": "number",
+          "description": "Distância de foco (m). Sem isso, segue automaticamente o alvo do plano de câmera atual."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Desfoque de profundidade (bokeh). Independente do retro FX."
+    },
+    "BloomDef": {
+      "type": "object",
+      "properties": {
+        "strength": {
+          "type": "number",
+          "description": "Intensidade. Padrão 0.6."
+        },
+        "radius": {
+          "type": "number",
+          "description": "Raio de espalhamento. Padrão 0.4."
+        },
+        "threshold": {
+          "type": "number",
+          "description": "Luminância mínima para brilhar (0..1). Padrão 0.85."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Brilho (bloom) em áreas claras/emissivas. Independente do retro FX."
     },
     "CameraShotDef": {
       "type": "object",
@@ -926,7 +1010,8 @@
         "pear",
         "cone",
         "can",
-        "wide"
+        "wide",
+        "screen"
       ]
     },
     "HairStyle": {
@@ -997,6 +1082,9 @@
         },
         "particles": {
           "$ref": "#/definitions/ParticlesDef"
+        },
+        "screen": {
+          "$ref": "#/definitions/ScreenDef"
         },
         "kind": {
           "type": "string",
@@ -1267,6 +1355,10 @@
         "subtitle": {
           "type": "boolean",
           "description": "false = fala sem legenda (o áudio e o lipsync continuam)."
+        },
+        "cutaway": {
+          "type": "string",
+          "description": "Id de um objeto (prop ou ator) citado nesta fala. Com `meta.autoCamera`, a cobertura automática corta para um plano de inserção (B-roll) nele no meio da fala."
         }
       },
       "required": [

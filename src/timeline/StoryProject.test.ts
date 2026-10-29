@@ -215,6 +215,37 @@ describe('cobertura automática de câmera (meta.autoCamera)', () => {
     expect(cameraAt(project, 3).preset).toBe('wide');
   });
 
+  it('corta para um plano de inserção no objeto citado (cutaway) e volta para quem fala', () => {
+    const script = {
+      meta: { title: 'x', autoCamera: true },
+      cast: { a: { kind: 'actor', name: 'A' }, bule: { kind: 'prop', prop: 'cup' } },
+      timeline: [
+        { time: 0, type: 'SPAWN_OBJECT', target: 'a', position: [0, 0, 0] },
+        { time: 0, type: 'SPAWN_OBJECT', target: 'bule', position: [1.5, 0.8, 0] },
+        { time: 1, type: 'PLAY_AUDIO_WITH_LIPSYNC', target: 'a', text: 'Olha esse bule', duration: 4, cutaway: 'bule' },
+      ],
+    };
+    const project = compileProject(registry, script);
+    expect(cameraAt(project, 1).subject).toBe('a');
+    const insert = cameraAt(project, 3.1);
+    expect(insert.preset).toBe('close_up');
+    expect(insert.subject).toBe('bule');
+    // Depois do insert, volta para quem fala.
+    expect(cameraAt(project, 4.4).subject).toBe('a');
+  });
+
+  it('rejeita um cutaway para um objeto que não existe', () => {
+    const errors = compileErrors(registry, {
+      meta: { title: 'x', autoCamera: true },
+      cast: { a: { kind: 'actor', name: 'A' } },
+      timeline: [
+        { time: 0, type: 'SPAWN_OBJECT', target: 'a', position: [0, 0, 0] },
+        { time: 1, type: 'PLAY_AUDIO_WITH_LIPSYNC', target: 'a', text: 'Oi', cutaway: 'fantasma' },
+      ],
+    });
+    expect(errors.some((e) => e.includes(`'cutaway'`))).toBe(true);
+  });
+
   it('desligado por padrão: a câmera não muda sozinha', () => {
     const script = {
       meta: { title: 'x' },

@@ -11,9 +11,11 @@ import type {
   PropDef,
   ReachTarget,
   SceneDef,
+  ScreenEffect,
   SkyDef,
   SocketRef,
 } from '../timeline/types';
+import { isVideoSrc } from '../timeline/types';
 import type { AssetLoader } from './AssetLoader';
 import type { ActorProvider } from '../systems/CameraDirector';
 import type { LipsyncState } from '../systems/AudioLipsync';
@@ -73,6 +75,133 @@ function canvasTexture(size: number, draw: (ctx: CanvasRenderingContext2D, size:
 }
 
 /* ========================================================================== */
+/*  Padrão projetado (cookie / gobo) de luzes spot                           */
+/* ========================================================================== */
+
+const cookieCache = new Map<string, THREE.Texture>();
+
+/** Persiana: faixas horizontais escuras, levemente inclinadas. */
+function drawBlinds(ctx: CanvasRenderingContext2D, s: number): void {
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, s, s);
+  ctx.fillStyle = '#000';
+  const n = 9;
+  for (let i = 0; i < n; i++) {
+    const y = (i / n) * s;
+    ctx.fillRect(0, y, s, (s / n) * 0.55);
+  }
+}
+
+/** Vidraça: caixilho escuro em cruz, vidraças claras. */
+function drawWindow(ctx: CanvasRenderingContext2D, s: number): void {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, s, s);
+  ctx.fillStyle = '#fff';
+  const m = s * 0.08;
+  const half = s * 0.46;
+  ctx.fillRect(m, m, half - m, half - m);
+  ctx.fillRect(s - half, m, half - m, half - m);
+  ctx.fillRect(m, s - half, half - m, half - m);
+  ctx.fillRect(s - half, s - half, half - m, half - m);
+}
+
+/** Folhagem: manchas irregulares, como luz coada por árvores. */
+function drawLeaves(ctx: CanvasRenderingContext2D, s: number): void {
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, s, s);
+  ctx.fillStyle = '#000';
+  const rand = seededRandom(hashString('leaves'));
+  for (let i = 0; i < 46; i++) {
+    const x = rand() * s;
+    const y = rand() * s;
+    const r = s * (0.06 + rand() * 0.12);
+    ctx.beginPath();
+    ctx.ellipse(x, y, r, r * (0.6 + rand() * 0.5), rand() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+const COOKIE_DRAWERS: Record<string, (ctx: CanvasRenderingContext2D, s: number) => void> = {
+  blinds: drawBlinds,
+  window: drawWindow,
+  leaves: drawLeaves,
+};
+
+/** Textura de spot.map: um preset procedural (cacheado) ou a URL de uma imagem própria. */
+function cookieTexture(cookie: string, assets: AssetLoader): THREE.Texture | null {
+  const draw = COOKIE_DRAWERS[cookie];
+  if (draw) {
+    let tex = cookieCache.get(cookie);
+    if (!tex) {
+      tex = canvasTexture(64, draw);
+      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+      cookieCache.set(cookie, tex);
+    }
+    return tex;
+  }
+  const custom = assets.getTexture(cookie);
+  if (!custom) console.warn(`[SceneManager] cookie '${cookie}' não é um preset nem uma textura carregada.`);
+  return custom ?? null;
+}
+
+/* ========================================================================== */
+/*  Telas (prop 'screen')                                                    */
+/* ========================================================================== */
+
+const screenEffectCache = new Map<ScreenEffect, THREE.Texture>();
+
+/** Grade LCD fina (subpixels). */
+function drawLcdEffect(ctx: CanvasRenderingContext2D, s: number): void {
+  ctx.clearRect(0, 0, s, s);
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  for (let y = 0; y < s; y += 4) ctx.fillRect(0, y, s, 1);
+  for (let x = 0; x < s; x += 4) ctx.fillRect(x, 0, 1, s);
+}
+
+/** Matriz de pontos (billboard de LED). */
+function drawDotsEffect(ctx: CanvasRenderingContext2D, s: number): void {
+  ctx.clearRect(0, 0, s, s);
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  const cell = s / 8;
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      ctx.beginPath();
+      ctx.arc((x + 0.5) * cell, (y + 0.5) * cell, cell * 0.14, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+/** Scanlines + vinheta sutil de tubo CRT. */
+function drawCrtEffect(ctx: CanvasRenderingContext2D, s: number): void {
+  ctx.clearRect(0, 0, s, s);
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  for (let y = 0; y < s; y += 3) ctx.fillRect(0, y, s, 1);
+  const g = ctx.createRadialGradient(s / 2, s / 2, s * 0.25, s / 2, s / 2, s * 0.7);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,0,0.45)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, s, s);
+}
+
+const SCREEN_EFFECT_DRAWERS: Record<ScreenEffect, (ctx: CanvasRenderingContext2D, s: number) => void> = {
+  lcd: drawLcdEffect,
+  dots: drawDotsEffect,
+  crt: drawCrtEffect,
+};
+
+function screenEffectTexture(effect: ScreenEffect): THREE.Texture {
+  let tex = screenEffectCache.get(effect);
+  if (!tex) {
+    tex = canvasTexture(64, SCREEN_EFFECT_DRAWERS[effect]);
+    tex.wrapS = tex.wrapT = effect === 'crt' ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping;
+    if (effect !== 'crt') tex.repeat.set(6, 6);
+    screenEffectCache.set(effect, tex);
+  }
+  return tex;
+}
+
+/* ========================================================================== */
 /*  Partículas (steam / smoke / dust / sparks)                                */
 /* ========================================================================== */
 
@@ -128,6 +257,8 @@ export class SceneManager implements ActorProvider {
   private readonly animated: Animated[] = [];
   /** Animações puras de `frame.time` (ex.: partículas) — diferente de `animated` (tempo real), ficam reversíveis no seek. */
   private readonly frameAnimated: Animated[] = [];
+  /** Vídeos de tela (prop 'screen'): tocam por conta própria, fora do relógio da história. */
+  private readonly screenVideos: HTMLVideoElement[] = [];
   /** Tudo que é recriado a cada história. */
   private readonly world = new THREE.Group();
   private dayNight: DayNightCycle | null = null;
@@ -159,6 +290,12 @@ export class SceneManager implements ActorProvider {
     return [...this.actors.values()];
   }
 
+  /** Posição no mundo de um prop (planos de inserção/B-roll). null se o id não for um prop da cena. */
+  propPosition(id: string, out: THREE.Vector3): THREE.Vector3 | null {
+    const prop = this.props.get(id);
+    return prop ? prop.object.getWorldPosition(out) : null;
+  }
+
   /* ---------------------------------------------------------------------- */
   /*  Construção                                                            */
   /* ---------------------------------------------------------------------- */
@@ -169,7 +306,7 @@ export class SceneManager implements ActorProvider {
     const scene = story.script.scene ?? {};
     this.buildEnvironment(scene);
     // Com ciclo dia/noite o sol e o céu são automáticos; luzes do script somam a eles.
-    this.buildLights(scene.lights ?? (this.dayNight ? [] : defaultLights()));
+    this.buildLights(scene.lights ?? (this.dayNight ? [] : defaultLights()), assets);
     for (const p of scene.props ?? []) {
       const obj = this.createProp(p, assets, hashString(JSON.stringify(p)));
       obj.position.set(p.position[0], p.position[1], p.position[2]);
@@ -240,6 +377,12 @@ export class SceneManager implements ActorProvider {
     this.lights.clear();
     this.animated.length = 0;
     this.frameAnimated.length = 0;
+    for (const v of this.screenVideos) {
+      v.pause();
+      v.removeAttribute('src');
+      v.load();
+    }
+    this.screenVideos.length = 0;
     this.world.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (mesh.isMesh) {
@@ -494,7 +637,7 @@ export class SceneManager implements ActorProvider {
     return mesh;
   }
 
-  private buildLights(defs: LightDef[]): void {
+  private buildLights(defs: LightDef[], assets: AssetLoader): void {
     for (const def of defs) {
       const color = new THREE.Color(def.color ?? '#ffffff');
       const intensity = def.intensity ?? 1;
@@ -531,6 +674,7 @@ export class SceneManager implements ActorProvider {
           const tgt = def.target ?? [0, 0, 0];
           s.target.position.set(tgt[0], tgt[1], tgt[2]);
           this.world.add(s.target);
+          if (def.cookie) s.map = cookieTexture(def.cookie, assets);
           light = s;
           break;
         }
@@ -780,6 +924,55 @@ export class SceneManager implements ActorProvider {
             (sprites[i].material as THREE.SpriteMaterial).opacity = Math.sin(Math.PI * u);
           }
         });
+        break;
+      }
+      case 'screen': {
+        const screenDef = def.screen;
+        const width = screenDef?.width ?? 1.6;
+        const height = screenDef?.height ?? 0.9;
+        const depth = Math.min(width, height) * 0.08;
+
+        const bezel = new THREE.Mesh(new THREE.BoxGeometry(width + depth, height + depth, depth).translate(0, 0, -depth / 2), lambert('#141418'));
+        g.add(bezel);
+
+        let map: THREE.Texture | null = null;
+        if (screenDef?.src) {
+          if (isVideoSrc(screenDef.src)) {
+            const video = document.createElement('video');
+            video.src = assets.resolve(screenDef.src);
+            video.loop = screenDef.loop ?? true;
+            video.muted = true;
+            video.playsInline = true;
+            video.crossOrigin = 'anonymous';
+            video.play().catch(() => {
+              /* autoplay pode exigir gesto do usuário; a tela fica no primeiro quadro até lá */
+            });
+            this.screenVideos.push(video);
+            const videoTex = new THREE.VideoTexture(video);
+            videoTex.colorSpace = THREE.SRGBColorSpace;
+            map = videoTex;
+            // Vídeo é tempo real (como a voz nativa do navegador): não entra no seek/na exportação.
+            this.animated.push(() => {
+              videoTex.needsUpdate = true;
+            });
+          } else {
+            map = assets.getTexture(screenDef.src) ?? null;
+            if (!map) console.warn(`[SceneManager] tela: imagem '${screenDef.src}' indisponível.`);
+          }
+        }
+        const screenMat = new THREE.MeshBasicMaterial({ map, color: map ? '#ffffff' : '#1a1a22' });
+        const panel = new THREE.Mesh(new THREE.PlaneGeometry(width, height), screenMat);
+        panel.position.z = 0.002;
+        g.add(panel);
+
+        if (screenDef?.effect) {
+          const overlay = new THREE.Mesh(
+            new THREE.PlaneGeometry(width, height),
+            new THREE.MeshBasicMaterial({ map: screenEffectTexture(screenDef.effect), transparent: true, depthWrite: false }),
+          );
+          overlay.position.z = 0.004;
+          g.add(overlay);
+        }
         break;
       }
     }

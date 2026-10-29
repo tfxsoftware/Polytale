@@ -18,7 +18,16 @@ import type { AssetLoader } from './AssetLoader';
 import type { LipsyncState } from '../systems/AudioLipsync';
 import { DEG2RAD, clamp, clamp01, damp, fbm1D, hashString, lerp, seededRandom, smoothstep } from '../utils/math';
 import { EXPRESSION_PRESETS, MorphController, zeroMorphs, type MorphName, type MorphWeights } from './ActorFace';
-import { ADDITIVE_JOINTS, BASE_HEIGHT, buildGltfRig, buildProceduralRig, type GltfRig, type ProceduralRig, type Rig } from './ActorRig';
+import {
+  ADDITIVE_JOINTS,
+  BASE_HEIGHT,
+  buildGltfRig,
+  buildProceduralRig,
+  type GltfRig,
+  type ProceduralRig,
+  type Rig,
+  type ScreenFaceRig,
+} from './ActorRig';
 import { solveTwoBoneIK } from './IK';
 
 /* ========================================================================== */
@@ -636,6 +645,79 @@ export class Actor {
     this.morphs.set('browInnerUp', m.browInnerUp + lip.energy * 0.15);
     this.morphs.set('browDown', m.browDown);
     this.morphs.set('browOuterUp', m.browOuterUp);
+
+    if (this.rig.kind === 'procedural' && this.rig.screenFace) this.drawScreenFace(this.rig.screenFace, m, blink);
+  }
+
+  /**
+   * Rosto-tela (headShape 'screen'): olhos e boca desenhados num canvas emissivo.
+   * As mesmas intensidades que moveriam os morphs definem o traço: sorriso vira "^ ^",
+   * tristeza vira arco para baixo, raiva inclina as barras e a boca abre com o lipsync.
+   */
+  private drawScreenFace(face: ScreenFaceRig, m: MorphWeights, blink: number): void {
+    const { ctx, canvas, texture } = face;
+    const w = canvas.width;
+    const h = canvas.height;
+    const glow = this.def.palette?.eyes ?? '#7df9ff';
+
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#0a0d14';
+    ctx.fillRect(0, 0, w, h);
+
+    const smile = clamp01(m.mouthSmile);
+    const frown = clamp01(m.mouthFrown);
+    const angry = clamp01(m.browDown);
+    const wide = clamp01(m.eyeWide);
+    const eyeY = h * 0.36;
+    const half = w * 0.08;
+
+    ctx.strokeStyle = glow;
+    ctx.fillStyle = glow;
+    ctx.lineWidth = Math.max(2, w * 0.045);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+
+    for (const side of [-1, 1] as const) {
+      const ex = w / 2 + side * w * 0.22;
+      if (blink > 0.55) {
+        ctx.beginPath();
+        ctx.moveTo(ex - half, eyeY);
+        ctx.lineTo(ex + half, eyeY);
+        ctx.stroke();
+      } else if (smile > 0.35) {
+        // "^ ^"
+        ctx.beginPath();
+        ctx.moveTo(ex - half, eyeY + h * 0.045);
+        ctx.lineTo(ex, eyeY - h * 0.045);
+        ctx.lineTo(ex + half, eyeY + h * 0.045);
+        ctx.stroke();
+      } else if (frown > 0.35) {
+        ctx.beginPath();
+        ctx.arc(ex, eyeY + h * 0.06, half, Math.PI * 1.15, Math.PI * 1.85);
+        ctx.stroke();
+      } else if (angry > 0.35) {
+        ctx.beginPath();
+        ctx.moveTo(ex - half, eyeY - side * h * 0.04);
+        ctx.lineTo(ex + half, eyeY + side * h * 0.04);
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.arc(ex, eyeY, w * (0.05 + wide * 0.025), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Boca: barra que abre com o lipsync e alarga com mouthWide.
+    const mouthW = w * (0.2 + clamp01(m.mouthWide) * 0.1);
+    const open = clamp01(Math.max(m.jawOpen, this.lipsync.jawOpen));
+    const mouthH = Math.max(h * 0.018, h * 0.16 * open);
+    const mouthY = h * 0.72;
+    const r = Math.min(mouthH / 2, w * 0.03);
+    ctx.beginPath();
+    ctx.roundRect(w / 2 - mouthW / 2, mouthY - mouthH / 2, mouthW, mouthH, r);
+    ctx.fill();
+
+    texture.needsUpdate = true;
   }
 }
 

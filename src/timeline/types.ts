@@ -162,7 +162,14 @@ export interface LightDef {
   angle?: number;
   /** Oscilação procedural de intensidade (0..1) — ex.: chama de fogueira. */
   flicker?: number;
+  /**
+   * Padrão projetado (gobo/cookie), só para 'spot': `'blinds' | 'window' | 'leaves'`
+   * (gerados por procedimento) ou a URL de uma imagem própria.
+   */
+  cookie?: string;
 }
+
+export const LIGHT_COOKIE_PRESETS = ['blinds', 'window', 'leaves'] as const;
 
 export interface GroundDef {
   color: string;
@@ -191,7 +198,8 @@ export type PropType =
   | 'book'
   | 'cup'
   | 'model'
-  | 'particles';
+  | 'particles'
+  | 'screen';
 
 export const PARTICLE_PRESETS = ['steam', 'smoke', 'dust', 'sparks'] as const;
 export type ParticlePreset = (typeof PARTICLE_PRESETS)[number];
@@ -203,12 +211,32 @@ export interface ParticlesDef {
   count?: number;
 }
 
+export const SCREEN_EFFECTS = ['lcd', 'dots', 'crt'] as const;
+export type ScreenEffect = (typeof SCREEN_EFFECTS)[number];
+
+/**
+ * Apenas para prop = 'screen'. Tela/monitor que mostra uma imagem ou vídeo (detectado pela
+ * extensão: .mp4/.webm/.ogg tocam como vídeo, o resto como imagem estática).
+ * Limitação: vídeo toca em loop por conta própria, fora do controle do relógio da história
+ * (como a voz nativa do navegador) — não é capturado pela exportação nem reversível no seek.
+ */
+export interface ScreenDef {
+  src: string;
+  /** Metros. Padrão 1.6 × 0.9 (16:9). */
+  width?: number;
+  height?: number;
+  /** Só para vídeo. Padrão true. */
+  loop?: boolean;
+  effect?: ScreenEffect;
+}
+
 export interface PropDef {
   prop: PropType;
   color?: string;
   /** Apenas para prop = 'model'. */
   model?: string;
   particles?: ParticlesDef;
+  screen?: ScreenDef;
 }
 
 /** Cenografia estática (não endereçável pela timeline). */
@@ -286,7 +314,8 @@ export type BodyBuild = (typeof BODY_BUILDS)[number];
 export const HAIR_STYLES = ['short', 'long', 'ponytail', 'bun', 'spiky', 'mohawk', 'bald'] as const;
 export type HairStyle = (typeof HAIR_STYLES)[number];
 
-export const HEAD_SHAPES = ['box', 'round', 'egg', 'bulb', 'pear', 'cone', 'can', 'wide'] as const;
+/** 'screen': cabeça-visor (robô) — olhos/boca desenhados num canvas emissivo em vez de morphs. */
+export const HEAD_SHAPES = ['box', 'round', 'egg', 'bulb', 'pear', 'cone', 'can', 'wide', 'screen'] as const;
 export type HeadShape = (typeof HEAD_SHAPES)[number];
 
 export const OUTFITS = ['casual', 'robe', 'dress'] as const;
@@ -447,11 +476,32 @@ export interface RetroSettings {
 export const COLOR_GRADES = ['none', 'warm', 'cool', 'noir'] as const;
 export type ColorGrade = (typeof COLOR_GRADES)[number];
 
+/** Desfoque de profundidade (bokeh). Independente do retro FX. */
+export interface DofDef {
+  /** Abertura: quanto maior, mais forte o desfoque fora de foco. Padrão 0.025. */
+  aperture?: number;
+  /** Distância de foco (m). Sem isso, segue automaticamente o alvo do plano de câmera atual. */
+  focus?: number;
+}
+
+/** Brilho (bloom) em áreas claras/emissivas. Independente do retro FX. */
+export interface BloomDef {
+  /** Intensidade. Padrão 0.6. */
+  strength?: number;
+  /** Raio de espalhamento. Padrão 0.4. */
+  radius?: number;
+  /** Luminância mínima para brilhar (0..1). Padrão 0.85. */
+  threshold?: number;
+}
+
 export interface FxDef {
   retro?: boolean;
   settings?: Partial<RetroSettings>;
   /** Correção de cor independente do retro FX (também funciona com ele desligado). Padrão 'none'. */
   grade?: ColorGrade;
+  /** Presença = ligado; campos opcionais usam os padrões. */
+  dof?: DofDef;
+  bloom?: BloomDef;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -510,6 +560,11 @@ export interface PlayAudioWithLipsyncEvent extends EventBase {
   hold?: number;
   /** false = fala sem legenda (o áudio e o lipsync continuam). */
   subtitle?: boolean;
+  /**
+   * Id de um objeto (prop ou ator) citado nesta fala. Com `meta.autoCamera`, a cobertura
+   * automática corta para um plano de inserção (B-roll) nele no meio da fala.
+   */
+  cutaway?: string;
 }
 
 export interface CameraCutEvent extends EventBase, CameraShotSpec {
@@ -943,10 +998,24 @@ export interface ActiveSound {
   bus: SoundBus;
 }
 
+/** `focus: null` = segue automaticamente o alvo do plano de câmera atual. */
+export interface ResolvedDof {
+  aperture: number;
+  focus: number | null;
+}
+
+export interface ResolvedBloom {
+  strength: number;
+  radius: number;
+  threshold: number;
+}
+
 export interface FxFrame {
   retro: boolean;
   settings: RetroSettings;
   grade: ColorGrade;
+  dof: ResolvedDof | null;
+  bloom: ResolvedBloom | null;
   fade: number;
   fadeColor: RGB;
   flash: number;
@@ -997,4 +1066,9 @@ export const CHARS_PER_SECOND = 13.5;
 export function estimateSpeechDuration(text: string, rate = 1): number {
   const chars = text.trim().length;
   return Math.max(1.2, chars / (CHARS_PER_SECOND * Math.max(0.1, rate)));
+}
+
+/** `ScreenDef.src` toca como vídeo (pela extensão) em vez de imagem estática. */
+export function isVideoSrc(src: string): boolean {
+  return /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(src);
 }

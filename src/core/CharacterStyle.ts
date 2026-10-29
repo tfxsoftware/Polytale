@@ -72,6 +72,9 @@ function headGeometry(shape: HeadShape): THREE.BufferGeometry {
       return new THREE.CylinderGeometry(0.2, 0.22, 0.48, 7, 1, false, Math.PI / 7);
     case 'wide':
       return new THREE.SphereGeometry(0.22, 8, 5).scale(1.5, 0.82, 1);
+    case 'screen':
+      // Caixa achatada: frente plana onde o visor emissivo encaixa.
+      return new THREE.BoxGeometry(0.42, 0.36, 0.3);
   }
 }
 

@@ -3,6 +3,8 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import type { ColorGrade, FxFrame, RetroSettings } from '../timeline/types';
 import { DEFAULT_RETRO_SETTINGS } from '../timeline/types';
 
@@ -224,13 +226,16 @@ const RetroShader = {
 /* ========================================================================== */
 
 /**
- * Pipeline: RenderPass -> OutputPass (tone mapping ACES + sRGB) -> RetroPass.
- * O shader retrô roda por último, sobre cores já em sRGB, para que a
- * quantização 15-bit e o dithering correspondam ao que aparece na tela.
+ * Pipeline: RenderPass -> BokehPass (dof) -> UnrealBloomPass -> OutputPass (tone mapping ACES + sRGB)
+ * -> RetroPass. DOF e bloom ficam antes do tone mapping (cor linear) e são independentes do retro FX;
+ * o shader retrô roda por último, sobre cores já em sRGB, para que a quantização 15-bit e o dithering
+ * correspondam ao que aparece na tela.
  */
 export class PostProcessing {
   readonly composer: EffectComposer;
   private readonly retroPass: ShaderPass;
+  private readonly bokehPass: BokehPass;
+  private readonly bloomPass: UnrealBloomPass;
   private readonly size = new THREE.Vector2();
   /** Interruptor do usuário (botão Retro FX); combina com o estado da timeline. */
   private _userEnabled = true;
@@ -242,10 +247,18 @@ export class PostProcessing {
   constructor(
     private readonly renderer: THREE.WebGLRenderer,
     scene: THREE.Scene,
-    camera: THREE.Camera,
+    private readonly camera: THREE.PerspectiveCamera,
   ) {
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(new RenderPass(scene, camera));
+    // DOF e bloom operam na cor linear, antes do tone mapping (OutputPass) — independentes do retro FX,
+    // que roda por último, já em sRGB.
+    this.bokehPass = new BokehPass(scene, camera, { focus: 3, aperture: 0.025, maxblur: 0.01 });
+    this.bokehPass.enabled = false;
+    this.composer.addPass(this.bokehPass);
+    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.6, 0.4, 0.85);
+    this.bloomPass.enabled = false;
+    this.composer.addPass(this.bloomPass);
     this.composer.addPass(new OutputPass());
     this.retroPass = new ShaderPass(RetroShader);
     this.composer.addPass(this.retroPass);
@@ -273,6 +286,7 @@ export class PostProcessing {
   setSize(width: number, height: number): void {
     this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.composer.setSize(width, height);
+    this.bloomPass.setSize(width, height);
     this.syncSize();
   }
 
@@ -281,8 +295,8 @@ export class PostProcessing {
     this.updateUniforms();
   }
 
-  /** Aplica o estado de efeitos da timeline (retro, parâmetros, grade, fade, flash). */
-  applyFrame(fx: FxFrame, elapsed: number): void {
+  /** Aplica o estado de efeitos da timeline (retro, parâmetros, grade, dof, bloom, fade, flash). */
+  applyFrame(fx: FxFrame, elapsed: number, focusDistance: number): void {
     this.timelineEnabled = fx.retro;
     this.settings = fx.settings;
     const u = this.retroPass.uniforms;
@@ -295,6 +309,22 @@ export class PostProcessing {
     (u.uFadeColor.value as THREE.Color).setRGB(fx.fadeColor[0], fx.fadeColor[1], fx.fadeColor[2]);
     u.uFlash.value = fx.flash;
     (u.uFlashColor.value as THREE.Color).setRGB(fx.flashColor[0], fx.flashColor[1], fx.flashColor[2]);
+
+    this.bokehPass.enabled = !!fx.dof;
+    if (fx.dof) {
+      // @types/three tipa `uniforms` como `object` (lacuna da lib); os nomes vêm do BokehShader.
+      const bokeh = this.bokehPass.uniforms as Record<'focus' | 'aperture' | 'aspect', { value: number }>;
+      bokeh.focus.value = fx.dof.focus ?? focusDistance;
+      bokeh.aperture.value = fx.dof.aperture;
+      bokeh.aspect.value = this.camera.aspect;
+    }
+    this.bloomPass.enabled = !!fx.bloom;
+    if (fx.bloom) {
+      this.bloomPass.strength = fx.bloom.strength;
+      this.bloomPass.radius = fx.bloom.radius;
+      this.bloomPass.threshold = fx.bloom.threshold;
+    }
+
     this.updateUniforms();
   }
 

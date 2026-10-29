@@ -415,7 +415,7 @@ engine.onUpdate((dt, elapsed) => {
 
   // 5. Câmera, efeitos e UI.
   director.apply(frame);
-  post.applyFrame(frame.fx, elapsed);
+  post.applyFrame(frame.fx, elapsed, director.getFocusDistance());
   dialogue.render(frame.dialogues, speakerAnchor);
   titleCard.render(pf.titleCard);
   overlay = { dialogues: frame.dialogues, titleCard: pf.titleCard };
