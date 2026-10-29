@@ -505,6 +505,8 @@ export class AudioLipsync {
   private lastDiscontinuity = -1;
   private _muted = false;
   private speakingSpeechKey: string | null = null;
+  /** Durante a geração de vídeo, vozes 'speech' tocam como 'babble' (o speechSynthesis não é gravável). */
+  private speechAsBabble = false;
 
   constructor() {
     const Ctor: typeof AudioContext =
@@ -542,6 +544,16 @@ export class AudioLipsync {
     this._muted = muted;
     this.master.gain.setTargetAtTime(muted ? 0 : 0.9, this.context.currentTime, 0.02);
     if (muted) this.cancelSpeech();
+  }
+
+  /**
+   * Liga/desliga a troca das vozes 'speech' por 'babble'. A voz do navegador sai
+   * direto pelo sistema operacional e não passa pelo Web Audio, então não entra no vídeo.
+   */
+  setSpeechAsBabble(on: boolean): void {
+    if (on === this.speechAsBabble) return;
+    this.speechAsBabble = on;
+    this.stopAll();
   }
 
   /** Buffers decodificados pelo AssetLoader. */
@@ -726,8 +738,23 @@ export class AudioLipsync {
       const buf = this.buffers.get(d.audio);
       if (buf) return buf;
     }
-    if ((voice.engine ?? 'speech') === 'babble') return this.babbleBuffer(d.text, voice);
+    const engine = voice.engine ?? 'speech';
+    if (engine === 'babble') return this.babbleBuffer(d.text, voice);
+    if (engine === 'speech' && this.speechAsBabble) return this.babbleBuffer(d.text, this.babbleStandIn(d, voice));
     return undefined;
+  }
+
+  /** Voz 'babble' no lugar de uma 'speech', esticada para durar o mesmo que a fala na timeline. */
+  private babbleStandIn(d: ActiveDialogue, voice: VoiceDef): VoiceDef {
+    const rate = voice.rate ?? 1;
+    const natural = this.planFor(d.text, { ...voice, rate }).duration;
+    return {
+      ...voice,
+      engine: 'babble',
+      // speechSynthesis usa pitch 0–2 (1 = normal); a babble usa Hz.
+      pitch: 140 * (voice.pitch ?? 1),
+      rate: clamp((rate * natural) / Math.max(0.3, d.speakDuration), 0.3, 3),
+    };
   }
 
   private syncDialogue(d: ActiveDialogue, rate: number, jumped: boolean): void {

@@ -72,7 +72,7 @@ The demo *A Chama Antiga* ("The Ancient Flame", 60 s, in Portuguese) starts play
 | `E` | Open the StoryScript editor (`Ctrl+Enter` applies, `Esc` closes) |
 | `T` | Toggle the visual track editor |
 | `G` | Generate a script with AI |
-| `V` | Record a `.webm` video from start to end (press again to stop early) |
+| `V` | Download the story as a `.webm` video (`Esc` cancels) |
 | `O` | Options: subtitle style editor with live preview (saved into the script) |
 | `L` | Show / hide subtitles (also applies to recordings) |
 | `Ctrl+Z` / `Ctrl+Shift+Z` (or `Ctrl+Y`) | Undo / redo script changes (JSON editor, track editor, AI generation, subtitle options) |
@@ -169,12 +169,16 @@ The panel also opts into server-side refusal fallbacks (`fallbacks: "default"`),
 is retried on Anthropic's recommended fallback model. You can also paste `skills.md` into any LLM chat
 and use the JSON it returns.
 
-### Recording video
+### Downloading a video
 
-Press `V` (or **● REC**): the story restarts, plays to the end and downloads a `.webm` (VP9/VP8 +
-Opus) with subtitles and chapter title cards burned in. Voices using the `babble` engine, audio files
-and procedural sounds are recorded; `speech` voices (`window.speechSynthesis`) are played by the
-operating system and can't be captured.
+Press `V` (or **⬇ VÍDEO**): the story plays once from start to end in real time (at 1x, without looping)
+while a progress card shows how far along it is, then a `.webm` (VP9/VP8 + Opus) with subtitles and
+chapter title cards burned in downloads automatically. `Esc` or **CANCELAR** stops without saving.
+Keep the tab visible while it runs: browsers pause hidden tabs.
+
+Audio files, procedural sounds and `babble` voices are recorded as-is. `speech` voices
+(`window.speechSynthesis`) are played by the operating system and can't be captured, so while the video
+is generated they are swapped for a `babble` voice stretched to the same line length.
 
 ---
 
@@ -241,6 +245,7 @@ src/
 │   ├── TimelineView.ts          # visual track editor
 │   ├── GeneratorPanel.ts        # "generate with AI" modal
 │   ├── TitleCard.ts             # chapter title cards
+│   ├── ExportOverlay.ts         # "generating video" progress card
 │   └── DialogueBox.ts           # typewriter-style subtitles
 ├── utils/math.ts                # noise, deterministic PRNG, helpers
 └── main.ts                      # bootstrap and per-frame orchestration

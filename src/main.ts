@@ -20,6 +20,7 @@ import { DialogueBox } from './ui/DialogueBox';
 import { SettingsPanel } from './ui/SettingsPanel';
 import { resolveSubtitles, type ScreenPoint, type SpeakerInfo, type SubtitleStyle } from './ui/SubtitleRenderer';
 import { TitleCard, type TitleCardState } from './ui/TitleCard';
+import { ExportOverlay } from './ui/ExportOverlay';
 import { defaultScript } from './config/defaultScript';
 
 /* -------------------------------------------------------------------------- */
@@ -105,7 +106,7 @@ const panel = new ControlPanel(ui, {
     timeline.pause();
     editor.open(currentScript);
   },
-  onToggleRecord: toggleRecording,
+  onExportVideo: () => void exportVideo(),
   onOpenGenerator: () => {
     timeline.pause();
     void generator.open();
@@ -285,46 +286,55 @@ function ensureChapter(next: CompiledChapter): void {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Gravação                                                                  */
+/*  Vídeo                                                                     */
 /* -------------------------------------------------------------------------- */
 
-async function toggleRecording(): Promise<boolean> {
-  if (recorder.recording) {
-    await finishRecording();
-    return false;
-  }
+const exportOverlay = new ExportOverlay(ui, { onCancel: () => void finishExport(false) });
+/** Velocidade e loop do usuário, restaurados ao fim da geração. */
+let exportRestore: { rate: number; loop: boolean } | null = null;
+
+/** Toca a história do início ao fim gravando o canvas + áudio; baixa o .webm no final. */
+async function exportVideo(): Promise<void> {
+  if (recorder.recording || !project) return;
   if (!Recorder.supported()) {
-    panel.setStatus('Este navegador não suporta gravação (MediaRecorder).', 'error');
-    return false;
+    panel.setStatus('Este navegador não consegue gerar vídeo (MediaRecorder).', 'error');
+    return;
   }
   await audio.unlock();
-  const usesSpeech = project?.chapters.some((c) =>
-    [...c.story.objects.values()].some((d) => d.kind === 'actor' && (d.voice?.engine ?? 'speech') === 'speech'),
-  );
+  tracks.close();
+  settings.close();
+  exportRestore = { rate: timeline.rate, loop: timeline.loop };
   timeline.pause();
+  timeline.setRate(1);
+  timeline.setLoop(false);
+  audio.setSpeechAsBabble(true);
   timeline.seek(0);
   recorder.start(30);
   timeline.play();
-  panel.setStatus(
-    usesSpeech
-      ? '● Gravando… (vozes "speech" do navegador não entram no arquivo; use "babble" ou arquivos de áudio)'
-      : '● Gravando… o vídeo será baixado ao final.',
-  );
-  return true;
+  panel.setStatus(null);
+  exportOverlay.show();
 }
 
-async function finishRecording(): Promise<void> {
+async function finishExport(save: boolean): Promise<void> {
+  if (!recorder.recording) return;
   timeline.pause();
   const blob = await recorder.stop();
-  panel.setRecording(false);
-  if (blob && blob.size > 0) {
+  exportOverlay.hide();
+  audio.setSpeechAsBabble(false);
+  if (exportRestore) {
+    timeline.setRate(exportRestore.rate);
+    timeline.setLoop(exportRestore.loop);
+    exportRestore = null;
+  }
+  if (!save) panel.setStatus('Geração do vídeo cancelada.');
+  else if (blob && blob.size > 0) {
     Recorder.download(blob, project?.script.meta.title ?? 'polytale');
-    panel.setStatus(`Vídeo salvo (${(blob.size / 1024 / 1024).toFixed(1)} MB).`);
-  } else panel.setStatus('Gravação vazia.', 'error');
+    panel.setStatus(`Vídeo baixado (${(blob.size / 1024 / 1024).toFixed(1)} MB).`);
+  } else panel.setStatus('Não foi possível gerar o vídeo.', 'error');
 }
 
 timeline.on('end', () => {
-  if (recorder.recording) void finishRecording();
+  if (recorder.recording) void finishExport(true);
 });
 
 /* -------------------------------------------------------------------------- */
@@ -360,6 +370,7 @@ engine.onUpdate((dt, elapsed) => {
   titleCard.render(pf.titleCard);
   overlay = { dialogues: frame.dialogues, titleCard: pf.titleCard };
   panel.update(timeline.snapshot(), engine.fps);
+  if (recorder.recording) exportOverlay.setProgress(timeline.time, timeline.duration);
   tracks.setPlayhead(pf.chapter.index, frame.time);
 });
 

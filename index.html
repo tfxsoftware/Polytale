@@ -116,8 +116,19 @@
       .editor-footer { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 
       .cp-marker.is-chapter { background: #ff7ad9; top: -2px; height: 24px; width: 2px; }
-      .cp-rec { color: #ff8a8a; }
-      .cp-rec.is-recording { color: #fff; background: #b3202f; border-color: #ff5d73; animation: blink 1s steps(1) infinite; }
+      /* ---------- Geração de vídeo ---------- */
+      .export-overlay { position: absolute; inset: 0; display: flex; justify-content: center; align-items: flex-start; padding: 16px; background: rgba(0, 0, 0, 0.15); }
+      .export-overlay[hidden] { display: none; }
+      .export-card {
+        width: min(420px, 100%); background: #0c0f22; border: 2px solid var(--border); border-radius: 6px; padding: 12px 14px;
+        display: flex; flex-direction: column; gap: 8px; font-size: 18px;
+      }
+      .export-title { font-size: 26px; color: var(--accent-2); }
+      .export-bar { height: 14px; background: #161a33; border: 2px solid var(--border); border-radius: 4px; overflow: hidden; }
+      .export-fill { height: 100%; width: 0; background: var(--accent); }
+      .export-info { color: var(--accent); }
+      .export-hint { color: var(--muted); font-size: 16px; }
+      .export-card .cp-btn { align-self: flex-end; }
       .editor-spacer { flex: 1; }
 
       /* ---------- Cartela de capítulo ---------- */

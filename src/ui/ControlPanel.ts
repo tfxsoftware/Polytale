@@ -12,8 +12,8 @@ export interface ControlPanelCallbacks {
   onToggleMute(): boolean;
   onRate(rate: number): void;
   onOpenEditor(): void;
-  /** Liga/desliga a gravação; retorna se está gravando. */
-  onToggleRecord(): Promise<boolean>;
+  /** Gera e baixa a história como vídeo. */
+  onExportVideo(): void;
   onOpenGenerator(): void;
   onToggleTracks(): void;
   onToggleSubtitles(): void;
@@ -59,7 +59,7 @@ export class ControlPanel {
   private readonly retroBtn: HTMLButtonElement;
   private readonly muteBtn: HTMLButtonElement;
   private readonly rateBtn: HTMLButtonElement;
-  private readonly recBtn: HTMLButtonElement;
+  private readonly videoBtn: HTMLButtonElement;
   private readonly scrubber: HTMLInputElement;
   private readonly markerLayer: HTMLDivElement;
   private readonly timeLabel: HTMLSpanElement;
@@ -112,7 +112,7 @@ export class ControlPanel {
     const tracksBtn = button('TRILHAS', 'Editor visual da timeline (T)');
     const aiBtn = button('✦ IA', 'Gerar roteiro com IA (G)');
     const settingsBtn = button('⚙ OPÇÕES', 'Opções de legenda (O)');
-    this.recBtn = button('● REC', 'Gravar vídeo .webm do início ao fim (V)', 'cp-rec');
+    this.videoBtn = button('⬇ VÍDEO', 'Baixar a história como vídeo .webm (V)');
     this.fpsLabel = document.createElement('span');
     this.fpsLabel.className = 'cp-fps';
 
@@ -128,7 +128,7 @@ export class ControlPanel {
       tracksBtn,
       aiBtn,
       settingsBtn,
-      this.recBtn,
+      this.videoBtn,
       this.fpsLabel,
     );
     this.root.append(this.titleLabel, this.status, row);
@@ -143,7 +143,7 @@ export class ControlPanel {
     tracksBtn.addEventListener('click', () => cb.onToggleTracks());
     aiBtn.addEventListener('click', () => cb.onOpenGenerator());
     settingsBtn.addEventListener('click', () => cb.onOpenSettings());
-    this.recBtn.addEventListener('click', () => void this.toggleRecord());
+    this.videoBtn.addEventListener('click', () => cb.onExportVideo());
 
     this.scrubber.addEventListener('pointerdown', () => {
       this.scrubbing = true;
@@ -188,15 +188,6 @@ export class ControlPanel {
     this.timeLabel.textContent = `${formatTime(s.time)} / ${formatTime(s.duration)}`;
     if (!this.scrubbing) this.scrubber.value = String(Math.round((s.time / Math.max(0.001, s.duration)) * 1000));
     this.fpsLabel.textContent = `${Math.round(fps)} fps`;
-  }
-
-  setRecording(on: boolean): void {
-    this.recBtn.classList.toggle('is-recording', on);
-    this.recBtn.textContent = on ? '■ PARAR' : '● REC';
-  }
-
-  private async toggleRecord(): Promise<void> {
-    this.setRecording(await this.cb.onToggleRecord());
   }
 
   setRetro(on: boolean): void {
@@ -311,7 +302,7 @@ export class ControlPanel {
         break;
       case 'v':
       case 'V':
-        void this.toggleRecord();
+        this.cb.onExportVideo();
         break;
       default:
         if (/^[1-5]$/.test(e.key)) {
