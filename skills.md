@@ -247,7 +247,9 @@ Campos comuns a **todos** os eventos:
                "size": 1.2, "color": "#ffffff", "background": "rgba(0,0,0,0.6)", "border": "#ffd166", "font": "VT323" }
 ```
 
-  `style`: `box` (caixa estilo RPG, padrão) ou `plain` (texto de cinema com contorno); `position`: `bottom` ou `top`;
+  `style`: `box` (caixa estilo RPG, padrão) ou `plain` (texto de cinema com contorno); `position`: `bottom` (padrão),
+  `top`, `center` ou `speaker` (balão sobre a cabeça de quem fala; se o ator estiver fora de quadro, a fala vai para
+  a base da tela); `margin`: distância extra da borda em px (em `speaker`, altura do balão acima da cabeça; padrão 0);
   `enabled: false` desliga todas as legendas; `background`/`border` valem só para `box`.
 - Volume (RMS) abre a mandíbula (`jawOpen`); agudos esticam a boca, graves arredondam.
 

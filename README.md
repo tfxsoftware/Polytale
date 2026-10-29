@@ -53,6 +53,7 @@ npm run build      # typecheck + production build into dist/
 npm run preview    # serve the build
 npm run typecheck  # TypeScript only
 npm test           # unit tests (Vitest); npm run test:watch for watch mode
+npm run schema     # regenerate schema/storyscript.schema.json after changing src/timeline/types.ts
 ```
 
 Open the page and click **PRESS START**. The click is needed for the browser to allow audio.
@@ -111,6 +112,25 @@ Open the editor (`E`), paste the JSON and apply it.
 Longer stories use `chapters` (each with its own `scene` and `timeline`) and a `cast` of reusable
 characters — see section 3.7 of `skills.md`.
 
+### Examples
+
+[`examples/`](./examples) has ready-to-open scripts (editor → open file), each showing off different features:
+
+| File | Shows |
+|---|---|
+| `encontro-no-parque.json` | `INTERACT` (high five, pick up, give, hug, sit) and speech-bubble subtitles |
+| `o-mapa.json` | `chapters` + `cast`, sunset with `SET_TIME_OF_DAY`, an interior `room` with furniture |
+| `tempestade.json` | Lightning (`SET_LIGHT` + flash + shake + thunder), `SET_RETRO_FX`, a custom gesture, `babble` voice |
+| `somente-leitura.json` | A longer piece (~2 min) |
+
+Every file in `examples/` is compiled and checked for reversible seeking by the test suite, so new examples double as tests.
+
+### JSON Schema
+
+[`schema/storyscript.schema.json`](./schema/storyscript.schema.json) is generated from `src/timeline/types.ts`
+(`npm run schema`; a test fails if it is stale). Add `"$schema": "../schema/storyscript.schema.json"` (path relative to
+your file) to a script to get autocomplete and inline errors in VS Code and other editors. The engine ignores the key.
+
 ### Action catalog
 
 | Group | Actions |
@@ -123,7 +143,7 @@ characters — see section 3.7 of `skills.md`.
 | Light & effects | `SET_LIGHT`, `SET_TIME_OF_DAY`, `SET_RETRO_FX`, `FADE_SCREEN`, `FLASH_SCREEN` |
 
 Subtitles are styled in the **⚙ OPÇÕES** panel (`O`), which writes an optional top-level `subtitles` block (`style: "box" | "plain"`,
-`position`, `showName`, `typewriter`, `size`, `color`, `background`, `border`, `font`, or
+`position: "bottom" | "top" | "center" | "speaker"` (speech bubble that follows the speaker's head), `margin`, `showName`, `typewriter`, `size`, `color`, `background`, `border`, `font`, or
 `enabled: false` to turn them off); a single line can opt out with `"subtitle": false`. The same
 style is used on screen and in exported videos.
 
@@ -190,14 +210,21 @@ src/
 ├── core/
 │   ├── Engine.ts                # renderer (shadows + ACES), loop, resize, delta time
 │   ├── SceneManager.ts          # scenery, lights, props, actors, attachments, IK targets
-│   ├── Actor.ts                 # character: morphs, procedural life, poses, two-bone IK
+│   ├── Actor.ts                 # character: procedural life, poses, gaze, lipsync
+│   ├── ActorRig.ts              # procedural and GLTF rigs (bones, sockets, meshes)
+│   ├── ActorFace.ts             # morph targets, expression presets, face geometry
+│   ├── IK.ts                    # two-bone IK
+│   ├── ScriptHistory.ts         # undo/redo of applied scripts
 │   ├── CharacterStyle.ts        # body builds, hair, outfits, accessories
 │   ├── Environment.ts           # day/night cycle, rooms, furniture
 │   ├── ScriptStorage.ts         # open/save .json, shareable links, local draft
 │   └── AssetLoader.ts           # cached GLTF, audio and texture loading
 ├── timeline/
 │   ├── Timeline.ts              # master clock (play/pause/seek/rate/loop)
-│   ├── ActionRegistry.ts        # validation, compilation, easings and evaluation
+│   ├── ActionRegistry.ts        # validation, compilation and evaluation
+│   ├── handlers.ts              # one handler per action type (validate / tracks / interval / expand)
+│   ├── compileTypes.ts          # handler contracts, CompiledStory, StoryScriptError
+│   ├── easing.ts                # easings and interpolators
 │   ├── poses.ts                 # pose presets and keyframed gestures
 │   ├── interactions.ts          # INTERACT macros
 │   ├── StoryProject.ts          # chapters: compilation, global clock, transitions
@@ -220,6 +247,9 @@ src/
 public/
 ├── models/                      # .glb / .gltf
 └── audio/                       # .mp3 / .wav
+examples/                        # sample scripts (also test fixtures)
+schema/storyscript.schema.json   # generated JSON Schema for StoryScript
+scripts/schema.ts                # schema generator (npm run schema)
 skills.md                        # LLM skill: free-form script → StoryScript (also the generator's prompt)
 .env.example                     # ANTHROPIC_API_KEY for the dev/preview proxy
 ```

@@ -18,7 +18,7 @@ import { TimelineView } from './ui/TimelineView';
 import { GeneratorPanel } from './ui/GeneratorPanel';
 import { DialogueBox } from './ui/DialogueBox';
 import { SettingsPanel } from './ui/SettingsPanel';
-import { resolveSubtitles, type SpeakerInfo, type SubtitleStyle } from './ui/SubtitleRenderer';
+import { resolveSubtitles, type ScreenPoint, type SpeakerInfo, type SubtitleStyle } from './ui/SubtitleRenderer';
 import { TitleCard, type TitleCardState } from './ui/TitleCard';
 import { defaultScript } from './config/defaultScript';
 
@@ -63,6 +63,17 @@ let subtitlesHidden = false;
 const speaker = (actorId: string): SpeakerInfo => {
   const def = chapter?.story.objects.get(actorId);
   return def?.kind === 'actor' ? { name: def.name, color: def.color ?? '#ffffff' } : { name: actorId, color: '#ffffff' };
+};
+
+const headTop = new THREE.Vector3();
+
+/** Topo da cabeça do ator na tela (0..1); null se estiver atrás da câmera ou fora de quadro. */
+const speakerAnchor = (actorId: string): ScreenPoint | null => {
+  const p = sceneManager.actorHeadTop(actorId, headTop);
+  if (!p) return null;
+  p.project(engine.camera);
+  if (p.z > 1 || Math.abs(p.x) > 1.05 || Math.abs(p.y) > 1.05) return null;
+  return { x: (p.x + 1) / 2, y: (1 - p.y) / 2 };
 };
 
 const titleCard = new TitleCard(ui);
@@ -345,7 +356,7 @@ engine.onUpdate((dt, elapsed) => {
   // 5. Câmera, efeitos e UI.
   director.apply(frame);
   post.applyFrame(frame.fx, elapsed);
-  dialogue.render(frame.dialogues);
+  dialogue.render(frame.dialogues, speakerAnchor);
   titleCard.render(pf.titleCard);
   overlay = { dialogues: frame.dialogues, titleCard: pf.titleCard };
   panel.update(timeline.snapshot(), engine.fps);
@@ -356,7 +367,7 @@ engine.onResize((w, h) => post.setSize(w, h));
 engine.setRenderer((dt) => {
   post.render(dt);
   // Copiado logo após o render (antes do navegador limpar o buffer WebGL).
-  recorder.captureFrame({ ...overlay, subtitles, speaker });
+  recorder.captureFrame({ ...overlay, subtitles, speaker, anchor: speakerAnchor });
 });
 
 /* -------------------------------------------------------------------------- */

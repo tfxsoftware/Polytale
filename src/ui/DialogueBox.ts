@@ -5,6 +5,7 @@ import {
   drawSubtitles,
   revealedChars,
   visibleDialogues,
+  type ScreenPoint,
   type SpeakerInfo,
   type SubtitleStyle,
 } from './SubtitleRenderer';
@@ -47,7 +48,8 @@ export class DialogueBox {
     this.clear();
   }
 
-  render(dialogues: ActiveDialogue[]): void {
+  /** `anchor`: topo da cabeça de cada ator na tela (usado com position 'speaker'). */
+  render(dialogues: ActiveDialogue[], anchor?: (actorId: string) => ScreenPoint | null): void {
     const { style, canvas } = this;
     const visible = visibleDialogues(dialogues, style);
     const dpr = window.devicePixelRatio || 1;
@@ -55,7 +57,13 @@ export class DialogueBox {
     const h = Math.round(canvas.clientHeight * dpr);
     const time = performance.now() / 1000;
     const caret = visible.length > 0 && caretVisible(time);
-    const signature = `${w}x${h}|${caret}|${visible.map((d) => `${d.key}:${revealedChars(d, style.typewriter)}`).join('|')}`;
+    // Balões seguem os atores: a posição (arredondada em px) entra na assinatura.
+    const where = (d: ActiveDialogue) => {
+      if (style.position !== 'speaker') return '';
+      const a = anchor?.(d.actorId);
+      return a ? `@${Math.round(a.x * w)},${Math.round(a.y * h)}` : '@-';
+    };
+    const signature = `${w}x${h}|${caret}|${visible.map((d) => `${d.key}:${revealedChars(d, style.typewriter)}${where(d)}`).join('|')}`;
     if (signature === this.lastSignature) return;
     this.lastSignature = signature;
 
@@ -67,7 +75,7 @@ export class DialogueBox {
     this.ctx.clearRect(0, 0, w, h);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const inset = style.position === 'top' ? TOP_INSET : BOTTOM_INSET;
-    drawSubtitles(this.ctx, { width: w / dpr, height: h / dpr, scale: 1, inset, time }, visible, style, this.speaker);
+    drawSubtitles(this.ctx, { width: w / dpr, height: h / dpr, scale: 1, inset, time, anchor }, visible, style, this.speaker);
 
     const spoken = visible.map((d) => `${this.speaker(d.actorId).name}: ${d.text}`).join(' ');
     if (this.live.textContent !== spoken) this.live.textContent = spoken;

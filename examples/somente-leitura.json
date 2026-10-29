@@ -1,4 +1,5 @@
 {
+  "$schema": "../schema/storyscript.schema.json",
   "meta": {
     "title": "Somente Leitura",
     "author": "Polytale",

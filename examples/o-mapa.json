@@ -1,0 +1,107 @@
+{
+  "$schema": "../schema/storyscript.schema.json",
+  "meta": { "title": "O Mapa", "author": "Polytale" },
+  "fx": { "retro": true },
+  "cast": {
+    "tito": { "kind": "actor", "name": "Tito", "color": "#ffd166", "height": 1.72, "build": "heavy", "headShape": "round",
+      "hair": "bald", "accessories": ["beard", "hat"], "palette": { "shirt": "#7a5230", "pants": "#3b3226", "accent": "#5c4033" },
+      "voice": { "engine": "speech", "lang": "pt-BR", "rate": 0.95, "pitch": 0.8 } },
+    "mira": { "kind": "actor", "name": "Mira", "color": "#c3a6ff", "height": 1.62, "headShape": "egg", "hair": "bun",
+      "outfit": "robe", "accessories": ["cape"], "palette": { "shirt": "#4b3f8f", "accent": "#2a2550", "hair": "#d8d0c0" },
+      "voice": { "engine": "speech", "lang": "pt-BR", "rate": 1.0, "pitch": 1.1 } }
+  },
+  "chapters": [
+    {
+      "title": "A Estrada",
+      "scene": {
+        "timeOfDay": 17.2,
+        "ground": { "color": "#a08a5a", "color2": "#988254", "tiles": 72 },
+        "props": [
+          { "prop": "rock", "position": [-3, 0, -3], "scale": 1.4 },
+          { "prop": "pine", "position": [5, 0, -6], "scale": 1.6 },
+          { "prop": "pine", "position": [-6, 0, -7], "scale": 1.3 },
+          { "prop": "tree", "position": [6, 0, 2] }
+        ]
+      },
+      "timeline": [
+        { "time": 0, "type": "SET_TIME_OF_DAY", "hour": 19.2, "duration": 16, "easing": "linear" },
+        { "time": 0, "type": "PLAY_SOUND", "src": "procedural:wind", "loop": true, "volume": 0.35 },
+        { "time": 0, "type": "SPAWN_OBJECT", "target": "tito", "position": [-5, 0, 2], "rotation": [0, 90, 0] },
+        { "time": 0, "type": "SPAWN_OBJECT", "target": "mira", "position": [-6, 0, 3], "rotation": [0, 90, 0] },
+        { "time": 0, "type": "CAMERA_CUT", "preset": "wide" },
+
+        { "time": 0.5, "type": "TRANSFORM_OBJECT", "target": "tito", "position": [0.5, 0, 0.5], "duration": 4.4, "easing": "linear" },
+        { "time": 0.5, "type": "TRANSFORM_OBJECT", "target": "mira", "position": [-0.8, 0, 1.6], "duration": 4.4, "easing": "linear" },
+        { "time": 5, "type": "TRANSFORM_OBJECT", "target": "tito", "rotation": [0, -50, 0], "duration": 0.5 },
+        { "time": 5, "type": "TRANSFORM_OBJECT", "target": "mira", "rotation": [0, 130, 0], "duration": 0.5 },
+        { "time": 5.2, "type": "SET_LOOK_TARGET", "target": "tito", "lookAt": "mira" },
+        { "time": 5.2, "type": "SET_LOOK_TARGET", "target": "mira", "lookAt": "tito" },
+
+        { "time": 5.4, "type": "CAMERA_CUT", "preset": "over_shoulder", "subject": "tito", "over": "mira", "side": "left" },
+        { "time": 5.5, "type": "SET_EXPRESSION", "target": "tito", "expression": "sad", "intensity": 0.6 },
+        { "time": 5.6, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "tito", "text": "Vai escurecer. Ainda falta muito?" },
+
+        { "time": 9, "type": "CAMERA_CUT", "preset": "over_shoulder", "subject": "mira", "over": "tito", "side": "right" },
+        { "time": 9.1, "type": "SET_POSE", "target": "mira", "pose": "handOnChin", "duration": 0.5 },
+        { "time": 9.2, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "mira", "text": "O mapa diz que a estalagem fica depois daquela colina." },
+        { "time": 13.4, "type": "SET_POSE", "target": "mira", "pose": "rest", "duration": 0.4 },
+        { "time": 13.6, "type": "INTERACT", "target": "mira", "interaction": "pointAt", "position": [6, 1.5, -8] },
+        { "time": 13.8, "type": "SET_LOOK_TARGET", "target": "tito", "lookAt": [6, 1.5, -8] },
+
+        { "time": 15.8, "type": "CAMERA_TRANSITION", "preset": "wide", "duration": 2.5 }
+      ]
+    },
+    {
+      "title": "A Estalagem",
+      "scene": {
+        "background": "#120d0a",
+        "room": { "width": 7, "depth": 6, "height": 2.8, "floor": "wood", "floorColor": "#7a5a3a", "wallColor": "#b89a76",
+          "doors": [ { "wall": "south", "offset": 1.5 } ], "windows": [ { "wall": "west", "offset": 0 } ] },
+        "lights": [
+          { "id": "amb", "type": "hemisphere", "color": "#d8c4a4", "groundColor": "#3a2a1a", "intensity": 0.7 },
+          { "id": "teto", "type": "point", "color": "#ffcf8a", "intensity": 7, "position": [0, 2.5, 0], "distance": 11, "castShadow": true, "flicker": 0.15 }
+        ],
+        "props": [
+          { "prop": "table", "position": [0, 0, -0.6] },
+          { "prop": "chair", "position": [-0.9, 0, -0.6], "rotation": 90 },
+          { "prop": "chair", "position": [0.9, 0, -0.6], "rotation": -90 },
+          { "prop": "candle", "position": [0, 0.78, -0.6] },
+          { "prop": "bookshelf", "position": [2.9, 0, -2.4], "rotation": -90 },
+          { "prop": "rug", "position": [0, 0, 1.2] }
+        ]
+      },
+      "timeline": [
+        { "time": 0, "type": "PLAY_SOUND", "src": "procedural:fire", "loop": true, "volume": 0.25 },
+        { "time": 0, "type": "SPAWN_OBJECT", "target": "tito", "position": [-1.6, 0, 1.8], "rotation": [0, 135, 0] },
+        { "time": 0, "type": "SPAWN_OBJECT", "target": "mira", "position": [1.6, 0, 1.8], "rotation": [0, -135, 0] },
+        { "time": 0, "type": "SPAWN_OBJECT", "target": "mapa", "object": { "kind": "prop", "prop": "book", "color": "#c9a96e" },
+          "position": [0.1, 0.8, -0.5] },
+        { "time": 0, "type": "CAMERA_CUT", "preset": "wide" },
+
+        { "time": 0.4, "type": "INTERACT", "target": "tito", "interaction": "sit", "position": [-0.9, 0, -0.6], "facing": 90, "seatHeight": 0.47 },
+        { "time": 0.8, "type": "INTERACT", "target": "mira", "interaction": "sit", "position": [0.9, 0, -0.6], "facing": -90, "seatHeight": 0.47 },
+        { "time": 4, "type": "SET_LOOK_TARGET", "target": "tito", "lookAt": "mira" },
+        { "time": 4, "type": "SET_LOOK_TARGET", "target": "mira", "lookAt": "mapa" },
+
+        { "time": 4.2, "type": "CAMERA_CUT", "preset": "two_shot", "subject": "tito", "over": "mira" },
+        { "time": 4.3, "type": "SET_EXPRESSION", "target": "tito", "expression": "happy", "intensity": 0.9 },
+        { "time": 4.4, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "tito", "text": "Uma cama de verdade! Nunca duvidei de você." },
+
+        { "time": 8.2, "type": "CAMERA_CUT", "preset": "close_up", "subject": "mira", "side": "right" },
+        { "time": 8.3, "type": "SET_EXPRESSION", "target": "mira", "expression": "thinking" },
+        { "time": 8.4, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "mira", "text": "Tito... o mapa mudou. Tem um caminho novo aqui." },
+        { "time": 10.6, "type": "REACH", "target": "mira", "hand": "right", "to": "mapa", "duration": 0.6, "hold": 1.6 },
+
+        { "time": 12.6, "type": "CAMERA_CUT", "preset": "close_up", "subject": "tito", "side": "left" },
+        { "time": 12.6, "type": "SET_EXPRESSION", "target": "tito", "expression": "surprised", "duration": 0.2 },
+        { "time": 12.6, "type": "SET_LOOK_TARGET", "target": "tito", "lookAt": "mapa" },
+        { "time": 12.8, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "tito", "text": "Mapas não mudam sozinhos." },
+        { "time": 14.9, "type": "SET_LIGHT", "target": "teto", "intensity": 2.5, "duration": 1.5 },
+        { "time": 15, "type": "PLAY_SOUND", "src": "procedural:chime", "volume": 0.6 },
+        { "time": 15.4, "type": "CAMERA_TRANSITION", "preset": "wide", "duration": 3 },
+        { "time": 16.5, "type": "FADE_SCREEN", "to": 1, "duration": 2 }
+      ],
+      "duration": 19
+    }
+  ]
+}

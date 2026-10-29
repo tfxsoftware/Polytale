@@ -319,6 +319,15 @@ export class SceneManager implements ActorProvider {
     return p;
   }
 
+  /** Ponto logo acima da cabeça de um ator (balões de fala). null se o ator não está na cena. */
+  actorHeadTop(id: string, out: THREE.Vector3): THREE.Vector3 | null {
+    const actor = this.actors.get(id);
+    if (!actor) return null;
+    actor.getPartWorldPosition('head', out);
+    out.y += 0.3;
+    return out;
+  }
+
   /** Posição de um ator (parte do corpo) ou prop (posição de mundo atual, mesmo se seguro). */
   private objectAnchor(id: string, part: NonNullable<Extract<ReachTarget, { target: string }>['part']>, out: THREE.Vector3): THREE.Vector3 | null {
     const actor = this.actors.get(id);

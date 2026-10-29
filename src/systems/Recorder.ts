@@ -1,5 +1,5 @@
 import type { ActiveDialogue } from '../timeline/types';
-import { drawSubtitles, visibleDialogues, type SpeakerInfo, type SubtitleStyle } from '../ui/SubtitleRenderer';
+import { drawSubtitles, visibleDialogues, type ScreenPoint, type SpeakerInfo, type SubtitleStyle } from '../ui/SubtitleRenderer';
 import { titleCardOpacity, type TitleCardState } from '../ui/TitleCard';
 
 export interface RecorderOverlay {
@@ -7,6 +7,8 @@ export interface RecorderOverlay {
   titleCard: TitleCardState | null;
   subtitles: SubtitleStyle;
   speaker(actorId: string): SpeakerInfo;
+  /** Topo da cabeça de cada ator na tela (legendas em balão). */
+  anchor?(actorId: string): ScreenPoint | null;
 }
 
 const MIME_CANDIDATES = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
@@ -86,7 +88,7 @@ export class Recorder {
     }
     ctx.drawImage(this.source, 0, 0, composite.width, composite.height);
     this.drawTitleCard(overlay.titleCard);
-    this.drawDialogues(visibleDialogues(overlay.dialogues, overlay.subtitles), overlay.subtitles, overlay.speaker);
+    this.drawDialogues(visibleDialogues(overlay.dialogues, overlay.subtitles), overlay);
   }
 
   async stop(): Promise<Blob | null> {
@@ -150,10 +152,13 @@ export class Recorder {
     ctx.restore();
   }
 
-  private drawDialogues(dialogues: ActiveDialogue[], style: SubtitleStyle, speaker: (id: string) => SpeakerInfo): void {
+  private drawDialogues(dialogues: ActiveDialogue[], overlay: RecorderOverlay): void {
     if (!this.ctx || !this.composite) return;
     const k = this.scale();
     const { width, height } = this.composite;
-    drawSubtitles(this.ctx, { width, height, scale: k, inset: (style.position === 'top' ? 24 : 28) * k, time: performance.now() / 1000 }, dialogues, style, speaker);
+    const style = overlay.subtitles;
+    const inset = (style.position === 'top' ? 24 : 28) * k;
+    const anchor = overlay.anchor?.bind(overlay);
+    drawSubtitles(this.ctx, { width, height, scale: k, inset, time: performance.now() / 1000, anchor }, dialogues, style, overlay.speaker);
   }
 }

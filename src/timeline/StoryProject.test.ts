@@ -95,6 +95,14 @@ describe('validação', () => {
     expect(errors).toContain(`'subtitles.size' deve ser um número > 0`);
   });
 
+  it('aceita as posições novas e valida a margem', () => {
+    for (const position of ['center', 'speaker']) {
+      expect(compileErrors(registry, { meta: { title: 'x' }, timeline: [], subtitles: { position, margin: 40 } })).toEqual([]);
+    }
+    const errors = compileErrors(registry, { meta: { title: 'x' }, timeline: [], subtitles: { margin: -5 } });
+    expect(errors).toContain(`'subtitles.margin' deve ser um número >= 0`);
+  });
+
   it('prefixa erros com o capítulo', () => {
     const errors = compileErrors(registry, {
       meta: { title: 'x' },

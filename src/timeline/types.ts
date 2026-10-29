@@ -669,7 +669,7 @@ export interface ChapterDef {
 }
 
 export const SUBTITLE_STYLES = ['box', 'plain'] as const;
-export const SUBTITLE_POSITIONS = ['bottom', 'top'] as const;
+export const SUBTITLE_POSITIONS = ['bottom', 'top', 'center', 'speaker'] as const;
 
 /** Visual das legendas (tela e vídeo exportado). */
 export interface SubtitleDef {
@@ -677,7 +677,10 @@ export interface SubtitleDef {
   enabled?: boolean;
   /** 'box' = caixa estilo RPG (padrão); 'plain' = texto de cinema com contorno. */
   style?: (typeof SUBTITLE_STYLES)[number];
+  /** 'bottom' (padrão), 'top', 'center' ou 'speaker' (balão sobre a cabeça de quem fala). */
   position?: (typeof SUBTITLE_POSITIONS)[number];
+  /** Distância extra da borda em px (em 'speaker': acima da cabeça). Padrão 0. */
+  margin?: number;
   /** Mostra o nome de quem fala. Padrão true. */
   showName?: boolean;
   /** Revela o texto letra a letra. Padrão true. */
@@ -693,6 +696,8 @@ export interface SubtitleDef {
 }
 
 export interface StoryScript {
+  /** Caminho/URL do JSON Schema (autocompletar em editores); ignorado pela engine. */
+  $schema?: string;
   meta: StoryMeta;
   subtitles?: SubtitleDef;
   scene?: SceneDef;

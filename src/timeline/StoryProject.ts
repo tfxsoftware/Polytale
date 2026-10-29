@@ -107,6 +107,7 @@ function validateSubtitles(s: unknown): string[] {
     if (s[f] !== undefined && typeof s[f] !== 'string') errs.push(`'subtitles.${f}' deve ser uma string`);
   }
   if (s.size !== undefined && (typeof s.size !== 'number' || !(s.size > 0))) errs.push(`'subtitles.size' deve ser um número > 0`);
+  if (s.margin !== undefined && (typeof s.margin !== 'number' || !(s.margin >= 0))) errs.push(`'subtitles.margin' deve ser um número >= 0`);
   return errs;
 }
 

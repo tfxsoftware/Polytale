@@ -59,6 +59,8 @@ export class SettingsPanel {
     enabled: HTMLInputElement;
     style: HTMLSelectElement;
     position: HTMLSelectElement;
+    margin: HTMLInputElement;
+    marginOut: HTMLOutputElement;
     showName: HTMLInputElement;
     typewriter: HTMLInputElement;
     size: HTMLInputElement;
@@ -72,6 +74,8 @@ export class SettingsPanel {
   };
   private readonly boxOnly: HTMLElement[] = [];
   private readonly dependent: HTMLElement[] = [];
+  private marginRow!: HTMLLabelElement;
+  private readonly marginLabel: HTMLSpanElement;
 
   constructor(
     parent: HTMLElement,
@@ -128,7 +132,11 @@ export class SettingsPanel {
       position: select([
         ['bottom', 'Embaixo'],
         ['top', 'Em cima'],
+        ['center', 'No centro'],
+        ['speaker', 'Sobre quem fala (balão)'],
       ]),
+      margin: range(0, 200, 4),
+      marginOut: document.createElement('output'),
       showName: check(),
       typewriter: check(),
       size: range(0.6, 2, 0.1),
@@ -146,6 +154,7 @@ export class SettingsPanel {
       this.row('Mostrar legendas', c.enabled),
       this.row('Estilo', c.style, 'dep'),
       this.row('Posição', c.position, 'dep'),
+      (this.marginRow = this.row('Distância da borda', c.margin, 'dep', c.marginOut)),
       this.row('Nome de quem fala', c.showName, 'dep'),
       this.row('Máquina de escrever', c.typewriter, 'dep'),
       this.row('Tamanho', c.size, 'dep', c.sizeOut),
@@ -155,6 +164,8 @@ export class SettingsPanel {
       this.row('Opacidade do fundo', c.opacity, 'box', c.opacityOut),
       this.row('Borda da caixa', c.border, 'box'),
     ];
+
+    this.marginLabel = this.marginRow.querySelector('span')!;
 
     const footer = document.createElement('div');
     footer.className = 'settings-footer';
@@ -177,6 +188,7 @@ export class SettingsPanel {
     c.enabled.addEventListener('change', () => set('enabled', c.enabled.checked));
     c.style.addEventListener('change', () => set('style', c.style.value as SubtitleDef['style']));
     c.position.addEventListener('change', () => set('position', c.position.value as SubtitleDef['position']));
+    c.margin.addEventListener('input', () => set('margin', Number(c.margin.value)));
     c.showName.addEventListener('change', () => set('showName', c.showName.checked));
     c.typewriter.addEventListener('change', () => set('typewriter', c.typewriter.checked));
     c.size.addEventListener('input', () => set('size', Number(c.size.value)));
@@ -231,6 +243,10 @@ export class SettingsPanel {
     c.enabled.checked = s.enabled;
     c.style.value = s.style;
     c.position.value = s.position;
+    c.margin.value = String(s.margin);
+    c.marginOut.textContent = `${s.margin}px`;
+    // No centro não há borda de referência; no balão a distância é acima da cabeça.
+    this.marginLabel.textContent = s.position === 'speaker' ? 'Altura do balão' : 'Distância da borda';
     c.showName.checked = s.showName;
     c.typewriter.checked = s.typewriter;
     c.size.value = String(s.size);
@@ -246,6 +262,7 @@ export class SettingsPanel {
 
     for (const el of this.dependent) el.classList.toggle('is-disabled', !s.enabled);
     for (const el of this.boxOnly) el.classList.toggle('is-disabled', !s.enabled || s.style !== 'box');
+    this.marginRow.classList.toggle('is-disabled', !s.enabled || s.position === 'center');
     this.drawPreview();
   }
 
@@ -269,7 +286,9 @@ export class SettingsPanel {
       ctx.fillText('(sem legendas)', w / 2, h / 2);
       return;
     }
-    drawSubtitles(ctx, { width: w, height: h, scale: 0.55, inset: 10, time: 0 }, [PREVIEW_LINE], style, () => ({ name: 'Personagem', color: '#ffd166' }));
+    // Na prévia, o "personagem" do balão fica no meio da base.
+    const anchor = () => ({ x: 0.5, y: 1 });
+    drawSubtitles(ctx, { width: w, height: h, scale: 0.55, inset: 10, time: 0, anchor }, [PREVIEW_LINE], style, () => ({ name: 'Personagem', color: '#ffd166' }));
   }
 
   private row(label: string, control: HTMLElement, group?: 'dep' | 'box', output?: HTMLOutputElement): HTMLLabelElement {

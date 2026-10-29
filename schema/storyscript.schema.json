@@ -1,0 +1,2187 @@
+{
+  "title": "Polytale StoryScript",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/StoryScript",
+  "definitions": {
+    "StoryScript": {
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "type": "string",
+          "description": "Caminho/URL do JSON Schema (autocompletar em editores); ignorado pela engine."
+        },
+        "meta": {
+          "$ref": "#/definitions/StoryMeta"
+        },
+        "subtitles": {
+          "$ref": "#/definitions/SubtitleDef"
+        },
+        "scene": {
+          "$ref": "#/definitions/SceneDef"
+        },
+        "fx": {
+          "$ref": "#/definitions/FxDef"
+        },
+        "cameras": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CameraShotDef"
+          }
+        },
+        "gestures": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/GestureDef"
+          },
+          "description": "Gestos customizados por keyframes, usados por PLAY_GESTURE."
+        },
+        "cast": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/ObjectDef"
+          },
+          "description": "Elenco reutilizável: um SPAWN_OBJECT sem `object` cujo `target` esteja aqui usa esta definição (evita repetir o personagem em cada capítulo)."
+        },
+        "timeline": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StoryEvent"
+          },
+          "description": "Cena única. Obrigatório quando não há `chapters`."
+        },
+        "chapters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ChapterDef"
+          },
+          "description": "História em capítulos, tocados em sequência."
+        }
+      },
+      "required": [
+        "meta"
+      ],
+      "additionalProperties": false
+    },
+    "StoryMeta": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração mínima; por padrão é o fim do último evento."
+        },
+        "loop": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "additionalProperties": false
+    },
+    "SubtitleDef": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "false = sem legendas. Padrão true."
+        },
+        "style": {
+          "type": "string",
+          "enum": [
+            "box",
+            "plain"
+          ],
+          "description": "'box' = caixa estilo RPG (padrão); 'plain' = texto de cinema com contorno."
+        },
+        "position": {
+          "type": "string",
+          "enum": [
+            "bottom",
+            "top",
+            "center",
+            "speaker"
+          ],
+          "description": "'bottom' (padrão), 'top', 'center' ou 'speaker' (balão sobre a cabeça de quem fala)."
+        },
+        "margin": {
+          "type": "number",
+          "description": "Distância extra da borda em px (em 'speaker': acima da cabeça). Padrão 0."
+        },
+        "showName": {
+          "type": "boolean",
+          "description": "Mostra o nome de quem fala. Padrão true."
+        },
+        "typewriter": {
+          "type": "boolean",
+          "description": "Revela o texto letra a letra. Padrão true."
+        },
+        "size": {
+          "type": "number",
+          "description": "Multiplicador do tamanho do texto (1 = padrão)."
+        },
+        "color": {
+          "type": "string"
+        },
+        "background": {
+          "type": "string",
+          "description": "Fundo e borda da caixa (style 'box')."
+        },
+        "border": {
+          "type": "string"
+        },
+        "font": {
+          "type": "string",
+          "description": "Família de fonte CSS (padrão 'VT323')."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Visual das legendas (tela e vídeo exportado)."
+    },
+    "SceneDef": {
+      "type": "object",
+      "properties": {
+        "background": {
+          "type": "string"
+        },
+        "sky": {
+          "$ref": "#/definitions/SkyDef"
+        },
+        "fog": {
+          "$ref": "#/definitions/FogDef"
+        },
+        "ground": {
+          "$ref": "#/definitions/GroundDef"
+        },
+        "lights": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/LightDef"
+          }
+        },
+        "props": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StaticPropDef"
+          }
+        },
+        "room": {
+          "$ref": "#/definitions/RoomDef"
+        },
+        "timeOfDay": {
+          "type": "number",
+          "description": "Hora do dia (0–24). Quando definida, a engine cria sol/lua, céu e névoa automáticos e permite SET_TIME_OF_DAY. Combina com `lights` do script."
+        }
+      },
+      "additionalProperties": false
+    },
+    "SkyDef": {
+      "type": "object",
+      "properties": {
+        "top": {
+          "type": "string"
+        },
+        "bottom": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "top",
+        "bottom"
+      ],
+      "additionalProperties": false
+    },
+    "FogDef": {
+      "type": "object",
+      "properties": {
+        "color": {
+          "type": "string"
+        },
+        "near": {
+          "type": "number"
+        },
+        "far": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "color",
+        "near",
+        "far"
+      ],
+      "additionalProperties": false
+    },
+    "GroundDef": {
+      "type": "object",
+      "properties": {
+        "color": {
+          "type": "string"
+        },
+        "color2": {
+          "type": "string"
+        },
+        "size": {
+          "type": "number"
+        },
+        "tiles": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "color"
+      ],
+      "additionalProperties": false
+    },
+    "LightDef": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/definitions/LightKind"
+        },
+        "color": {
+          "type": "string"
+        },
+        "groundColor": {
+          "type": "string",
+          "description": "Só para 'hemisphere'."
+        },
+        "intensity": {
+          "type": "number"
+        },
+        "position": {
+          "$ref": "#/definitions/Vec3"
+        },
+        "target": {
+          "$ref": "#/definitions/Vec3",
+          "description": "Alvo para 'directional' e 'spot'."
+        },
+        "castShadow": {
+          "type": "boolean"
+        },
+        "distance": {
+          "type": "number",
+          "description": "Alcance para 'point'/'spot' (0 = infinito)."
+        },
+        "angle": {
+          "type": "number",
+          "description": "Ângulo de abertura em graus para 'spot'."
+        },
+        "flicker": {
+          "type": "number",
+          "description": "Oscilação procedural de intensidade (0..1) — ex.: chama de fogueira."
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "LightKind": {
+      "type": "string",
+      "enum": [
+        "ambient",
+        "hemisphere",
+        "directional",
+        "point",
+        "spot"
+      ]
+    },
+    "Vec3": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 3,
+      "maxItems": 3,
+      "description": "StoryScript — formato declarativo (JSON) que descreve uma cena narrativa: cenário, luzes, planos de câmera e uma lista de eventos no tempo.\n\nTodo o estado visual em um instante `t` é derivado deterministicamente dos eventos (ver ActionRegistry). Por isso a timeline é reversível: um seek para qualquer instante recalcula o estado completo da cena."
+    },
+    "StaticPropDef": {
+      "type": "object",
+      "properties": {
+        "prop": {
+          "$ref": "#/definitions/PropType"
+        },
+        "color": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string",
+          "description": "Apenas para prop = 'model'."
+        },
+        "position": {
+          "$ref": "#/definitions/Vec3"
+        },
+        "rotation": {
+          "type": "number",
+          "description": "Graus em torno do eixo Y."
+        },
+        "scale": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "position",
+        "prop"
+      ],
+      "additionalProperties": false,
+      "description": "Cenografia estática (não endereçável pela timeline)."
+    },
+    "PropType": {
+      "type": "string",
+      "enum": [
+        "tree",
+        "pine",
+        "rock",
+        "crate",
+        "campfire",
+        "pillar",
+        "lamp",
+        "stool",
+        "table",
+        "chair",
+        "bookshelf",
+        "bed",
+        "rug",
+        "candle",
+        "door",
+        "orb",
+        "book",
+        "cup",
+        "model"
+      ]
+    },
+    "RoomDef": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "number"
+        },
+        "depth": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        },
+        "wallColor": {
+          "type": "string"
+        },
+        "floorColor": {
+          "type": "string"
+        },
+        "floor": {
+          "type": "string",
+          "enum": [
+            "wood",
+            "stone",
+            "tiles"
+          ]
+        },
+        "ceiling": {
+          "type": "boolean"
+        },
+        "doors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/WallOpening"
+          }
+        },
+        "windows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/WallOpening"
+          }
+        }
+      },
+      "required": [
+        "width",
+        "depth"
+      ],
+      "additionalProperties": false,
+      "description": "Ambiente interno (cômodo) centrado na origem. Norte = -Z, Sul = +Z, Leste = +X, Oeste = -X. As paredes só são visíveis por dentro: câmeras do lado de fora enxergam através delas."
+    },
+    "WallOpening": {
+      "type": "object",
+      "properties": {
+        "wall": {
+          "$ref": "#/definitions/WallSide"
+        },
+        "offset": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "wall"
+      ],
+      "additionalProperties": false,
+      "description": "Abertura numa parede do cômodo. `offset` = deslocamento do centro ao longo da parede (m)."
+    },
+    "WallSide": {
+      "type": "string",
+      "enum": [
+        "north",
+        "south",
+        "east",
+        "west"
+      ]
+    },
+    "FxDef": {
+      "type": "object",
+      "properties": {
+        "retro": {
+          "type": "boolean"
+        },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "pixelSize": {
+              "type": "number",
+              "description": "Tamanho do pixel virtual (downscale), em pixels de tela."
+            },
+            "colorLevels": {
+              "type": "number",
+              "description": "Níveis por canal (32 = cor 15-bit do PS1)."
+            },
+            "dither": {
+              "type": "number",
+              "description": "Intensidade do dithering Bayer 4x4 (0..1)."
+            },
+            "scanlines": {
+              "type": "number"
+            },
+            "curvature": {
+              "type": "number"
+            },
+            "vignette": {
+              "type": "number"
+            },
+            "chromatic": {
+              "type": "number"
+            },
+            "noise": {
+              "type": "number"
+            },
+            "vertexSnap": {
+              "type": "number",
+              "description": "Intensidade do jitter de vértices do PS1 (0..1)."
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "CameraShotDef": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "position": {
+          "$ref": "#/definitions/PointRef"
+        },
+        "lookAt": {
+          "$ref": "#/definitions/PointRef"
+        },
+        "fov": {
+          "type": "number"
+        },
+        "roll": {
+          "type": "number",
+          "description": "Graus."
+        },
+        "handheld": {
+          "type": "number",
+          "description": "Amplitude de \"câmera na mão\" (0..1)."
+        }
+      },
+      "required": [
+        "id",
+        "position",
+        "lookAt"
+      ],
+      "additionalProperties": false,
+      "description": "Plano de câmera customizado, declarado em `cameras`."
+    },
+    "PointRef": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Vec3"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "actor": {
+              "type": "string"
+            },
+            "offset": {
+              "$ref": "#/definitions/Vec3"
+            },
+            "local": {
+              "type": "boolean",
+              "description": "Se true, `offset` é rotacionado pelo yaw do ator."
+            },
+            "anchor": {
+              "type": "string",
+              "enum": [
+                "head",
+                "chest",
+                "root"
+              ]
+            }
+          },
+          "required": [
+            "actor"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "description": "Ponto no mundo ou relativo a um ator."
+    },
+    "GestureDef": {
+      "type": "object",
+      "properties": {
+        "duration": {
+          "type": "number"
+        },
+        "keyframes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "t": {
+                "type": "number"
+              },
+              "pose": {
+                "$ref": "#/definitions/PoseDef"
+              }
+            },
+            "required": [
+              "t",
+              "pose"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "duration",
+        "keyframes"
+      ],
+      "additionalProperties": false,
+      "description": "Gesto customizado: keyframes de pose ao longo do progresso (0..1)."
+    },
+    "PoseDef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "crouch": {
+          "type": "number"
+        },
+        "hips": {
+          "$ref": "#/definitions/Vec3"
+        },
+        "chest": {
+          "$ref": "#/definitions/Vec3"
+        },
+        "neck": {
+          "$ref": "#/definitions/Vec3"
+        },
+        "head": {
+          "$ref": "#/definitions/Vec3"
+        },
+        "shoulderL": {
+          "$ref": "#/definitions/Vec3"
+        },
+        "elbowL": {
+          "$ref": "#/definitions/Vec3"
+        },
+        "shoulderR": {
+          "$ref": "#/definitions/Vec3"
+        },
+        "elbowR": {
+          "$ref": "#/definitions/Vec3"
+        },
+        "hipL": {
+          "$ref": "#/definitions/Vec3"
+        },
+        "kneeL": {
+          "$ref": "#/definitions/Vec3"
+        },
+        "hipR": {
+          "$ref": "#/definitions/Vec3"
+        },
+        "kneeR": {
+          "$ref": "#/definitions/Vec3"
+        }
+      },
+      "description": "Pose: rotação Euler (graus) por articulação + quanto o quadril desce (metros)."
+    },
+    "ObjectDef": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ActorObjectDef"
+        },
+        {
+          "$ref": "#/definitions/PropObjectDef"
+        }
+      ]
+    },
+    "ActorObjectDef": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "actor"
+        },
+        "name": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string",
+          "description": "Cor do nome nas legendas."
+        },
+        "model": {
+          "type": "string",
+          "description": "GLTF/GLB opcional. Sem modelo é gerado um personagem low-poly procedural."
+        },
+        "palette": {
+          "$ref": "#/definitions/ActorPalette"
+        },
+        "voice": {
+          "$ref": "#/definitions/VoiceDef"
+        },
+        "idleClip": {
+          "type": "string",
+          "description": "Clipe GLTF tocado em loop por padrão."
+        },
+        "height": {
+          "type": "number",
+          "description": "Altura aproximada (m) usada no personagem procedural."
+        },
+        "build": {
+          "$ref": "#/definitions/BodyBuild",
+          "description": "Tipo de corpo do personagem procedural."
+        },
+        "headShape": {
+          "$ref": "#/definitions/HeadShape",
+          "description": "Formato da cabeça do personagem procedural."
+        },
+        "hair": {
+          "$ref": "#/definitions/HairStyle"
+        },
+        "outfit": {
+          "$ref": "#/definitions/Outfit"
+        },
+        "accessories": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Accessory"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "ActorPalette": {
+      "type": "object",
+      "properties": {
+        "skin": {
+          "type": "string"
+        },
+        "hair": {
+          "type": "string"
+        },
+        "shirt": {
+          "type": "string"
+        },
+        "pants": {
+          "type": "string"
+        },
+        "shoes": {
+          "type": "string"
+        },
+        "eyes": {
+          "type": "string"
+        },
+        "accent": {
+          "type": "string",
+          "description": "Cor de acessórios (chapéu, capa, cachecol, mochila...)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "VoiceDef": {
+      "type": "object",
+      "properties": {
+        "engine": {
+          "$ref": "#/definitions/VoiceEngine"
+        },
+        "pitch": {
+          "type": "number",
+          "description": "Frequência fundamental (Hz) para 'babble'; para 'speech', 1 = normal."
+        },
+        "rate": {
+          "type": "number",
+          "description": "Velocidade (1 = normal)."
+        },
+        "timbre": {
+          "type": "number",
+          "description": "Deslocamento de formantes para 'babble' (1 = adulto)."
+        },
+        "volume": {
+          "type": "number"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Idioma para 'speech' (ex.: 'pt-BR')."
+        }
+      },
+      "additionalProperties": false
+    },
+    "VoiceEngine": {
+      "type": "string",
+      "enum": [
+        "speech",
+        "babble",
+        "none"
+      ],
+      "description": "- 'speech': Web Speech API (window.speechSynthesis), lipsync procedural estimado pelo texto.\n- 'babble': sintetizador de formantes procedural renderizado em AudioBuffer (lipsync via AnalyserNode).\n- 'none': mudo (apenas legenda e boca procedural)."
+    },
+    "BodyBuild": {
+      "type": "string",
+      "enum": [
+        "slim",
+        "average",
+        "athletic",
+        "heavy"
+      ]
+    },
+    "HeadShape": {
+      "type": "string",
+      "enum": [
+        "box",
+        "round",
+        "egg",
+        "bulb",
+        "pear",
+        "cone",
+        "can",
+        "wide"
+      ]
+    },
+    "HairStyle": {
+      "type": "string",
+      "enum": [
+        "short",
+        "long",
+        "ponytail",
+        "bun",
+        "spiky",
+        "mohawk",
+        "bald"
+      ]
+    },
+    "Outfit": {
+      "type": "string",
+      "enum": [
+        "casual",
+        "robe",
+        "dress"
+      ]
+    },
+    "Accessory": {
+      "type": "string",
+      "enum": [
+        "hat",
+        "wizardHat",
+        "cap",
+        "crown",
+        "glasses",
+        "beard",
+        "mustache",
+        "scarf",
+        "backpack",
+        "cape"
+      ]
+    },
+    "PropObjectDef": {
+      "type": "object",
+      "properties": {
+        "prop": {
+          "$ref": "#/definitions/PropType"
+        },
+        "color": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string",
+          "description": "Apenas para prop = 'model'."
+        },
+        "kind": {
+          "type": "string",
+          "const": "prop"
+        }
+      },
+      "required": [
+        "kind",
+        "prop"
+      ],
+      "additionalProperties": false
+    },
+    "StoryEvent": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SpawnObjectEvent"
+        },
+        {
+          "$ref": "#/definitions/DespawnObjectEvent"
+        },
+        {
+          "$ref": "#/definitions/TransformObjectEvent"
+        },
+        {
+          "$ref": "#/definitions/PlayAudioWithLipsyncEvent"
+        },
+        {
+          "$ref": "#/definitions/CameraCutEvent"
+        },
+        {
+          "$ref": "#/definitions/CameraTransitionEvent"
+        },
+        {
+          "$ref": "#/definitions/CameraShakeEvent"
+        },
+        {
+          "$ref": "#/definitions/SetLightEvent"
+        },
+        {
+          "$ref": "#/definitions/SetLookTargetEvent"
+        },
+        {
+          "$ref": "#/definitions/SetExpressionEvent"
+        },
+        {
+          "$ref": "#/definitions/PlayGestureEvent"
+        },
+        {
+          "$ref": "#/definitions/SetPoseEvent"
+        },
+        {
+          "$ref": "#/definitions/ReachEvent"
+        },
+        {
+          "$ref": "#/definitions/AttachObjectEvent"
+        },
+        {
+          "$ref": "#/definitions/DetachObjectEvent"
+        },
+        {
+          "$ref": "#/definitions/InteractEvent"
+        },
+        {
+          "$ref": "#/definitions/PlayAnimationEvent"
+        },
+        {
+          "$ref": "#/definitions/SetRetroFxEvent"
+        },
+        {
+          "$ref": "#/definitions/SetTimeOfDayEvent"
+        },
+        {
+          "$ref": "#/definitions/FadeScreenEvent"
+        },
+        {
+          "$ref": "#/definitions/FlashScreenEvent"
+        },
+        {
+          "$ref": "#/definitions/PlaySoundEvent"
+        }
+      ]
+    },
+    "SpawnObjectEvent": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração em segundos (0/omitido = ação instantânea)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "SPAWN_OBJECT"
+        },
+        "target": {
+          "type": "string",
+          "description": "Id único do objeto."
+        },
+        "object": {
+          "$ref": "#/definitions/ObjectDef",
+          "description": "Obrigatório no primeiro spawn de um id."
+        },
+        "position": {
+          "$ref": "#/definitions/Vec3"
+        },
+        "rotation": {
+          "$ref": "#/definitions/Vec3",
+          "description": "Euler em graus [x, y, z]."
+        },
+        "scale": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "target",
+        "time",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "EasingName": {
+      "type": "string",
+      "enum": [
+        "linear",
+        "step",
+        "easeInQuad",
+        "easeOutQuad",
+        "easeInOutQuad",
+        "easeInCubic",
+        "easeOutCubic",
+        "easeInOutCubic",
+        "easeInOutSine",
+        "easeOutBack",
+        "easeOutElastic",
+        "easeOutBounce"
+      ]
+    },
+    "DespawnObjectEvent": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração em segundos (0/omitido = ação instantânea)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "DESPAWN_OBJECT"
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "target",
+        "time",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "TransformObjectEvent": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração em segundos (0/omitido = ação instantânea)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "TRANSFORM_OBJECT"
+        },
+        "target": {
+          "type": "string"
+        },
+        "position": {
+          "$ref": "#/definitions/Vec3"
+        },
+        "rotation": {
+          "$ref": "#/definitions/Vec3",
+          "description": "Euler em graus [x, y, z] — interpolado pelo menor caminho."
+        },
+        "scale": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "target",
+        "time",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "PlayAudioWithLipsyncEvent": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração em segundos (0/omitido = ação instantânea)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "PLAY_AUDIO_WITH_LIPSYNC"
+        },
+        "target": {
+          "type": "string",
+          "description": "Ator que fala."
+        },
+        "text": {
+          "type": "string",
+          "description": "Texto da legenda (e da fala sintetizada no fallback)."
+        },
+        "audio": {
+          "type": "string",
+          "description": "Arquivo de áudio (ex.: 'audio/fala01.mp3'). Sem ele usa a voz do ator."
+        },
+        "volume": {
+          "type": "number"
+        },
+        "hold": {
+          "type": "number",
+          "description": "Tempo extra da legenda na tela após a fala."
+        },
+        "subtitle": {
+          "type": "boolean",
+          "description": "false = fala sem legenda (o áudio e o lipsync continuam)."
+        }
+      },
+      "required": [
+        "target",
+        "text",
+        "time",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "CameraCutEvent": {
+      "type": "object",
+      "properties": {
+        "shot": {
+          "type": "string",
+          "description": "Id de um plano em `cameras`."
+        },
+        "preset": {
+          "$ref": "#/definitions/CameraPreset"
+        },
+        "subject": {
+          "type": "string",
+          "description": "Ator enquadrado pelo preset."
+        },
+        "over": {
+          "type": "string",
+          "description": "Ator de cujo ombro a câmera olha (over_shoulder) ou segundo ator (two_shot)."
+        },
+        "side": {
+          "type": "string",
+          "enum": [
+            "left",
+            "right"
+          ]
+        },
+        "fov": {
+          "type": "number"
+        },
+        "offset": {
+          "$ref": "#/definitions/Vec3",
+          "description": "Deslocamento extra da posição da câmera, em metros (espaço do mundo)."
+        },
+        "handheld": {
+          "type": "number"
+        },
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração em segundos (0/omitido = ação instantânea)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "CAMERA_CUT"
+        }
+      },
+      "required": [
+        "time",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "CameraPreset": {
+      "type": "string",
+      "enum": [
+        "wide",
+        "medium",
+        "close_up",
+        "over_shoulder",
+        "two_shot",
+        "low_angle"
+      ]
+    },
+    "CameraTransitionEvent": {
+      "type": "object",
+      "properties": {
+        "shot": {
+          "type": "string",
+          "description": "Id de um plano em `cameras`."
+        },
+        "preset": {
+          "$ref": "#/definitions/CameraPreset"
+        },
+        "subject": {
+          "type": "string",
+          "description": "Ator enquadrado pelo preset."
+        },
+        "over": {
+          "type": "string",
+          "description": "Ator de cujo ombro a câmera olha (over_shoulder) ou segundo ator (two_shot)."
+        },
+        "side": {
+          "type": "string",
+          "enum": [
+            "left",
+            "right"
+          ]
+        },
+        "fov": {
+          "type": "number"
+        },
+        "offset": {
+          "$ref": "#/definitions/Vec3",
+          "description": "Deslocamento extra da posição da câmera, em metros (espaço do mundo)."
+        },
+        "handheld": {
+          "type": "number"
+        },
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração em segundos (0/omitido = ação instantânea)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "CAMERA_TRANSITION"
+        }
+      },
+      "required": [
+        "time",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "CameraShakeEvent": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração em segundos (0/omitido = ação instantânea)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "CAMERA_SHAKE"
+        },
+        "intensity": {
+          "type": "number",
+          "description": "Amplitude inicial (0.1 sutil, 1 forte)."
+        },
+        "frequency": {
+          "type": "number",
+          "description": "Hz do tremor."
+        },
+        "decay": {
+          "type": "number",
+          "description": "Constante de decaimento exponencial (amplitude = intensity * e^(-decay*t))."
+        }
+      },
+      "required": [
+        "time",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "SetLightEvent": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração em segundos (0/omitido = ação instantânea)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "SET_LIGHT"
+        },
+        "target": {
+          "type": "string",
+          "description": "Id da luz em scene.lights."
+        },
+        "color": {
+          "type": "string"
+        },
+        "intensity": {
+          "type": "number"
+        },
+        "position": {
+          "$ref": "#/definitions/Vec3"
+        }
+      },
+      "required": [
+        "target",
+        "time",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "SetLookTargetEvent": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração em segundos (0/omitido = ação instantânea)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "SET_LOOK_TARGET"
+        },
+        "target": {
+          "type": "string",
+          "description": "Ator que olha."
+        },
+        "lookAt": {
+          "$ref": "#/definitions/LookTarget"
+        }
+      },
+      "required": [
+        "lookAt",
+        "target",
+        "time",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "LookTarget": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/definitions/Vec3"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Alvo do olhar: id de ator, 'camera', ponto no mundo ou null (olhar livre)."
+    },
+    "SetExpressionEvent": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração em segundos (0/omitido = ação instantânea)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "SET_EXPRESSION"
+        },
+        "target": {
+          "type": "string"
+        },
+        "expression": {
+          "$ref": "#/definitions/Expression"
+        },
+        "intensity": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "expression",
+        "target",
+        "time",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "Expression": {
+      "type": "string",
+      "enum": [
+        "neutral",
+        "happy",
+        "sad",
+        "angry",
+        "surprised",
+        "thinking"
+      ]
+    },
+    "PlayGestureEvent": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração em segundos (0/omitido = ação instantânea)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "PLAY_GESTURE"
+        },
+        "target": {
+          "type": "string"
+        },
+        "gesture": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Gesture"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Gesto embutido ou nome de um gesto em `gestures` do script."
+        }
+      },
+      "required": [
+        "gesture",
+        "target",
+        "time",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "Gesture": {
+      "type": "string",
+      "enum": [
+        "wave",
+        "point",
+        "shrug",
+        "nod",
+        "headShake",
+        "bow"
+      ]
+    },
+    "SetPoseEvent": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração em segundos (0/omitido = ação instantânea)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "SET_POSE"
+        },
+        "target": {
+          "type": "string"
+        },
+        "pose": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PosePreset"
+            },
+            {
+              "$ref": "#/definitions/PoseDef"
+            }
+          ],
+          "description": "Preset ou pose explícita. 'rest' devolve o corpo à animação procedural."
+        },
+        "merge": {
+          "type": "boolean",
+          "description": "Se true, mantém articulações da pose anterior que esta não define."
+        },
+        "seatHeight": {
+          "type": "number",
+          "description": "Altura do assento (m) para o preset 'sit'."
+        }
+      },
+      "required": [
+        "pose",
+        "target",
+        "time",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "PosePreset": {
+      "type": "string",
+      "enum": [
+        "rest",
+        "sit",
+        "kneel",
+        "crouch",
+        "armsCrossed",
+        "handsOnHips",
+        "handOnChin",
+        "armsUp"
+      ]
+    },
+    "ReachEvent": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração em segundos (0/omitido = ação instantânea)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "REACH"
+        },
+        "target": {
+          "type": "string",
+          "description": "Ator que estende o braço."
+        },
+        "hand": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Hand"
+            },
+            {
+              "type": "string",
+              "const": "both"
+            }
+          ]
+        },
+        "to": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ReachTarget"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Alvo da mão; null recolhe o braço."
+        },
+        "shake": {
+          "type": "number",
+          "description": "Balanço vertical da mão (0..1) — ex.: aperto de mão."
+        },
+        "hold": {
+          "type": "number",
+          "description": "Se informado, recolhe o braço automaticamente após este tempo (s)."
+        }
+      },
+      "required": [
+        "target",
+        "time",
+        "to",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "Hand": {
+      "type": "string",
+      "enum": [
+        "left",
+        "right"
+      ]
+    },
+    "ReachTarget": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/definitions/Vec3"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string"
+            },
+            "part": {
+              "$ref": "#/definitions/BodyPart"
+            },
+            "offset": {
+              "$ref": "#/definitions/Vec3"
+            },
+            "local": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "midpoint": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "height": {
+              "type": "number"
+            },
+            "offset": {
+              "$ref": "#/definitions/Vec3"
+            }
+          },
+          "required": [
+            "midpoint"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "description": "Alvo de alcance (IK do braço):\n- id de objeto (ator = peito, prop = posição do prop);\n- ponto [x, y, z];\n- { target, part, offset, local } — parte do corpo de um ator ou objeto, com deslocamento;\n- { midpoint: [a, b], height } — ponto médio entre dois objetos (aperto de mão, toca-aqui)."
+    },
+    "BodyPart": {
+      "type": "string",
+      "enum": [
+        "head",
+        "chest",
+        "back",
+        "shoulderL",
+        "shoulderR",
+        "handL",
+        "handR",
+        "root"
+      ]
+    },
+    "AttachObjectEvent": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração em segundos (0/omitido = ação instantânea)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "ATTACH_OBJECT"
+        },
+        "target": {
+          "type": "string",
+          "description": "Prop a ser preso."
+        },
+        "to": {
+          "type": "string",
+          "description": "Ator que segura."
+        },
+        "socket": {
+          "$ref": "#/definitions/Socket"
+        },
+        "offset": {
+          "$ref": "#/definitions/Vec3",
+          "description": "Deslocamento no espaço do encaixe (m)."
+        },
+        "rotation": {
+          "$ref": "#/definitions/Vec3",
+          "description": "Rotação Euler (graus) no espaço do encaixe."
+        }
+      },
+      "required": [
+        "target",
+        "time",
+        "to",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "Socket": {
+      "type": "string",
+      "enum": [
+        "handR",
+        "handL",
+        "head",
+        "back",
+        "chest"
+      ]
+    },
+    "DetachObjectEvent": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração em segundos (0/omitido = ação instantânea)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "DETACH_OBJECT"
+        },
+        "target": {
+          "type": "string"
+        },
+        "position": {
+          "$ref": "#/definitions/Vec3",
+          "description": "Onde o objeto pousa (padrão: no chão, à frente de quem segurava)."
+        },
+        "rotation": {
+          "$ref": "#/definitions/Vec3"
+        }
+      },
+      "required": [
+        "target",
+        "time",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "InteractEvent": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração em segundos (0/omitido = ação instantânea)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "INTERACT"
+        },
+        "target": {
+          "type": "string",
+          "description": "Ator que inicia a interação."
+        },
+        "interaction": {
+          "$ref": "#/definitions/Interaction"
+        },
+        "with": {
+          "type": "string",
+          "description": "Outro ator (handshake, hug, give, push...) ou objeto/ponto (pickUp, pointAt, sit)."
+        },
+        "object": {
+          "type": "string",
+          "description": "Objeto envolvido (give: o que é entregue; putDown: o que é largado)."
+        },
+        "position": {
+          "$ref": "#/definitions/Vec3",
+          "description": "Posição (sit: assento; putDown: onde largar; pointAt: ponto)."
+        },
+        "facing": {
+          "type": "number",
+          "description": "Yaw final (graus) para 'sit'/'kneel'."
+        },
+        "seatHeight": {
+          "type": "number"
+        },
+        "approach": {
+          "type": "boolean",
+          "description": "Se false, não caminha até o outro antes de interagir (padrão true)."
+        }
+      },
+      "required": [
+        "interaction",
+        "target",
+        "time",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "Interaction": {
+      "type": "string",
+      "enum": [
+        "handshake",
+        "highFive",
+        "hug",
+        "give",
+        "pickUp",
+        "putDown",
+        "handOnShoulder",
+        "push",
+        "sit",
+        "stand",
+        "kneel",
+        "pointAt"
+      ]
+    },
+    "PlayAnimationEvent": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração em segundos (0/omitido = ação instantânea)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "PLAY_ANIMATION"
+        },
+        "target": {
+          "type": "string"
+        },
+        "clip": {
+          "type": "string",
+          "description": "Nome do clipe GLTF."
+        },
+        "loop": {
+          "type": "boolean"
+        },
+        "fade": {
+          "type": "number",
+          "description": "Crossfade em segundos."
+        }
+      },
+      "required": [
+        "clip",
+        "target",
+        "time",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "SetRetroFxEvent": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração em segundos (0/omitido = ação instantânea)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "SET_RETRO_FX"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "pixelSize": {
+              "type": "number",
+              "description": "Tamanho do pixel virtual (downscale), em pixels de tela."
+            },
+            "colorLevels": {
+              "type": "number",
+              "description": "Níveis por canal (32 = cor 15-bit do PS1)."
+            },
+            "dither": {
+              "type": "number",
+              "description": "Intensidade do dithering Bayer 4x4 (0..1)."
+            },
+            "scanlines": {
+              "type": "number"
+            },
+            "curvature": {
+              "type": "number"
+            },
+            "vignette": {
+              "type": "number"
+            },
+            "chromatic": {
+              "type": "number"
+            },
+            "noise": {
+              "type": "number"
+            },
+            "vertexSnap": {
+              "type": "number",
+              "description": "Intensidade do jitter de vértices do PS1 (0..1)."
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "time",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "SetTimeOfDayEvent": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração em segundos (0/omitido = ação instantânea)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "SET_TIME_OF_DAY"
+        },
+        "hour": {
+          "type": "number",
+          "description": "Hora alvo (0–24). O tempo sempre avança (de 22 para 2 passa pela meia-noite)."
+        }
+      },
+      "required": [
+        "hour",
+        "time",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "FadeScreenEvent": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração em segundos (0/omitido = ação instantânea)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "FADE_SCREEN"
+        },
+        "to": {
+          "type": "number",
+          "description": "0 = cena visível, 1 = tela coberta pela cor."
+        },
+        "color": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "time",
+        "to",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "FlashScreenEvent": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração em segundos (0/omitido = ação instantânea)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "FLASH_SCREEN"
+        },
+        "color": {
+          "type": "string"
+        },
+        "intensity": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "time",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "PlaySoundEvent": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração em segundos (0/omitido = ação instantânea)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "PLAY_SOUND"
+        },
+        "src": {
+          "type": "string",
+          "description": "URL ou um dos PROCEDURAL_SOUNDS."
+        },
+        "volume": {
+          "type": "number"
+        },
+        "loop": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "src",
+        "time",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "ChapterDef": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "scene": {
+          "$ref": "#/definitions/SceneDef",
+          "description": "Cenário/efeitos/câmeras do capítulo; se omitidos, herdam os do topo do script."
+        },
+        "fx": {
+          "$ref": "#/definitions/FxDef"
+        },
+        "cameras": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CameraShotDef"
+          }
+        },
+        "gestures": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/GestureDef"
+          }
+        },
+        "timeline": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StoryEvent"
+          }
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração mínima do capítulo (s)."
+        },
+        "transition": {
+          "type": "string",
+          "enum": [
+            "fade",
+            "cut"
+          ],
+          "description": "Entrada do capítulo: 'fade' (padrão, escurece e clareia) ou 'cut'."
+        },
+        "showTitle": {
+          "type": "boolean",
+          "description": "Cartela com o título no início do capítulo (padrão true)."
+        }
+      },
+      "required": [
+        "title",
+        "timeline"
+      ],
+      "additionalProperties": false,
+      "description": "Capítulo: uma cena completa (cenário próprio) dentro de uma história maior."
+    }
+  }
+}
