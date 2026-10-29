@@ -207,6 +207,12 @@ export class SettingsPanel {
     this.root.hidden = true;
   }
 
+  /** Atualiza os controles sem mexer no foco (ex.: depois de desfazer). */
+  refresh(current: SubtitleDef | undefined): void {
+    this.def = { ...current };
+    this.sync();
+  }
+
   toggle(current: SubtitleDef | undefined): void {
     if (this.isOpen) this.close();
     else this.open(current);

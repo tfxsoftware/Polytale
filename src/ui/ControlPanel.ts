@@ -18,6 +18,8 @@ export interface ControlPanelCallbacks {
   onToggleTracks(): void;
   onToggleSubtitles(): void;
   onOpenSettings(): void;
+  onUndo(): void;
+  onRedo(): void;
 }
 
 export interface TimelineMarker {
@@ -251,7 +253,17 @@ export class ControlPanel {
     const el = e.target as HTMLElement | null;
     if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.isContentEditable)) return;
     if (document.querySelector('.editor-backdrop:not([hidden])')) return;
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    // Ctrl+Z desfaz; Ctrl+Shift+Z / Ctrl+Y refaz (campos de texto mantêm o desfazer nativo, acima).
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+      const key = e.key.toLowerCase();
+      if (key === 'z' || key === 'y') {
+        e.preventDefault();
+        if (key === 'y' || e.shiftKey) this.cb.onRedo();
+        else this.cb.onUndo();
+      }
+      return;
+    }
+    if (e.altKey) return;
 
     switch (e.key) {
       case ' ':

@@ -52,6 +52,7 @@ npm run dev        # dev server (http://localhost:5173)
 npm run build      # typecheck + production build into dist/
 npm run preview    # serve the build
 npm run typecheck  # TypeScript only
+npm test           # unit tests (Vitest); npm run test:watch for watch mode
 ```
 
 Open the page and click **PRESS START**. The click is needed for the browser to allow audio.
@@ -73,6 +74,7 @@ The demo *A Chama Antiga* ("The Ancient Flame", 60 s, in Portuguese) starts play
 | `V` | Record a `.webm` video from start to end (press again to stop early) |
 | `O` | Options: subtitle style editor with live preview (saved into the script) |
 | `L` | Show / hide subtitles (also applies to recordings) |
+| `Ctrl+Z` / `Ctrl+Shift+Z` (or `Ctrl+Y`) | Undo / redo script changes (JSON editor, track editor, AI generation, subtitle options) |
 
 Your last applied script is kept in the browser and restored on reload ("Restaurar demo" in the editor
 brings the demo back). A shared link (`#story=...`) loads the script embedded in the URL.

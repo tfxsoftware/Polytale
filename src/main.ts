@@ -3,6 +3,7 @@ import { Engine } from './core/Engine';
 import { SceneManager } from './core/SceneManager';
 import { AssetLoader } from './core/AssetLoader';
 import { loadDraft, saveDraft, scriptFromLocation } from './core/ScriptStorage';
+import { ScriptHistory } from './core/ScriptHistory';
 import { Timeline } from './timeline/Timeline';
 import { ActionRegistry, StoryScriptError } from './timeline/ActionRegistry';
 import { compileProject, evaluateProject, type CompiledChapter, type CompiledProject } from './timeline/StoryProject';
@@ -46,6 +47,7 @@ const assets = new AssetLoader(audio.context);
 const director = new CameraDirector(engine.camera, sceneManager);
 const post = new PostProcessing(engine.renderer, sceneManager.scene, engine.camera);
 const recorder = new Recorder(engine.canvas, audio.context, audio.output);
+const history = new ScriptHistory();
 
 let project: CompiledProject | null = null;
 let chapter: CompiledChapter | null = null;
@@ -108,6 +110,8 @@ const panel = new ControlPanel(ui, {
   onToggleTracks: () => {
     if (isScript(currentScript)) tracks.toggle(currentScript, chapter?.index ?? 0);
   },
+  onUndo: () => void stepHistory('undo'),
+  onRedo: () => void stepHistory('redo'),
 });
 
 const settings = new SettingsPanel(ui, {
@@ -120,6 +124,7 @@ const settings = new SettingsPanel(ui, {
     project.script = next;
     applySubtitles();
     saveDraft(next);
+    history.record(next, 'subtitles');
     if (tracks.isOpen) tracks.setScript(next, chapter?.index ?? 0);
   },
 });
@@ -130,7 +135,11 @@ const editor = new TimelineEditor(ui, {
 });
 
 const tracks = new TimelineView(ui, {
-  onChange: (script) => loadStory(script, { keepTime: timeline.time, persist: true, fromTracks: true }),
+  onChange: async (script) => {
+    const errors = await loadStory(script, { keepTime: timeline.time, persist: true, fromTracks: true });
+    if (!errors.length) history.record(script);
+    return errors;
+  },
   onSeek: (index, local) => {
     const c = project?.chapters[index];
     if (c) timeline.seek(c.start + local);
@@ -170,8 +179,39 @@ function isScript(v: unknown): v is StoryScript {
 
 async function applyScript(raw: unknown): Promise<string[]> {
   const errors = await loadStory(raw, { persist: true });
+  if (!errors.length) history.record(raw);
   if (!errors.length && isScript(raw) && tracks.isOpen) tracks.setScript(raw, 0);
   return errors;
+}
+
+let historyBusy = false;
+
+/** Desfaz/refaz: recarrega a versão anterior/seguinte mantendo a posição da timeline. */
+async function stepHistory(direction: 'undo' | 'redo'): Promise<void> {
+  if (historyBusy || recorder.recording) return;
+  const script = direction === 'undo' ? history.undo() : history.redo();
+  if (!script) {
+    panel.setStatus(direction === 'undo' ? 'Nada para desfazer.' : 'Nada para refazer.');
+    return;
+  }
+  historyBusy = true;
+  try {
+    const errors = await loadStory(script, { keepTime: timeline.time, persist: true });
+    if (errors.length) {
+      // Volta o ponteiro do histórico para a versão que continua carregada.
+      if (direction === 'undo') history.redo();
+      else history.undo();
+      panel.setStatus(`Não foi possível ${direction === 'undo' ? 'desfazer' : 'refazer'}: ${errors[0]}`, 'error');
+      return;
+    }
+    if (isScript(script)) {
+      if (tracks.isOpen) tracks.setScript(script, chapter?.index ?? 0);
+      if (settings.isOpen) settings.refresh(script.subtitles);
+    }
+    panel.setStatus(direction === 'undo' ? 'Desfeito (Ctrl+Shift+Z refaz).' : 'Refeito.');
+  } finally {
+    historyBusy = false;
+  }
 }
 
 interface LoadOptions {
@@ -374,6 +414,7 @@ async function bootstrap(): Promise<void> {
   for (const [raw, source] of candidates) {
     const errors = await loadStory(raw);
     if (!errors.length) {
+      history.reset(raw);
       const title = isScript(raw) ? raw.meta.title : 'Polytale';
       if (source === 'rascunho') panel.setStatus('Último roteiro editado restaurado (Restaurar demo no editor volta ao original).');
       panel.showStartScreen(title, () => {
