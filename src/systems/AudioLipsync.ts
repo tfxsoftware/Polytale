@@ -623,7 +623,17 @@ export class AudioLipsync {
         this.syncSound(s, rate);
       }
     }
-    for (const key of [...this.playing.keys()]) if (!live.has(key)) this.stop(key);
+    for (const key of [...this.playing.keys()]) {
+      if (live.has(key)) continue;
+      // Voz nativa: a duração é só estimada pelo texto. Se a fala passar da janela
+      // durante a reprodução normal, deixa terminar em vez de cortar no meio;
+      // pausa, seek, mudo ou a fala seguinte ainda interrompem.
+      if (playing && !jumped && this.playing.get(key)?.kind === 'speech') {
+        if (this.speakingSpeechKey !== key) this.playing.delete(key); // já terminou
+        continue;
+      }
+      this.stop(key);
+    }
   }
 
   /** Analisa os canais e atualiza o estado de boca. `frame` permite o lipsync estimado. */
