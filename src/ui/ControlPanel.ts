@@ -16,6 +16,8 @@ export interface ControlPanelCallbacks {
   onToggleRecord(): Promise<boolean>;
   onOpenGenerator(): void;
   onToggleTracks(): void;
+  onToggleSubtitles(): void;
+  onOpenSettings(): void;
 }
 
 export interface TimelineMarker {
@@ -47,7 +49,7 @@ function button(label: string, title: string, className = ''): HTMLButtonElement
  * Overlay de controle: Play/Pause, reinício, scrubber com marcadores,
  * velocidade, mudo, botão Retro FX e acesso ao editor de script.
  * Atalhos: Espaço (play/pause), ←/→ (±1s, Shift ±5s), Home (início),
- * R (Retro FX), M (mudo), E (editor), 1–5 (velocidade).
+ * R (Retro FX), M (mudo), E (editor), O (opções), L (legendas), 1–5 (velocidade).
  */
 export class ControlPanel {
   private readonly root: HTMLDivElement;
@@ -107,6 +109,7 @@ export class ControlPanel {
     const editBtn = button('{ } SCRIPT', 'Editar StoryScript (E)');
     const tracksBtn = button('TRILHAS', 'Editor visual da timeline (T)');
     const aiBtn = button('✦ IA', 'Gerar roteiro com IA (G)');
+    const settingsBtn = button('⚙ OPÇÕES', 'Opções de legenda (O)');
     this.recBtn = button('● REC', 'Gravar vídeo .webm do início ao fim (V)', 'cp-rec');
     this.fpsLabel = document.createElement('span');
     this.fpsLabel.className = 'cp-fps';
@@ -122,6 +125,7 @@ export class ControlPanel {
       editBtn,
       tracksBtn,
       aiBtn,
+      settingsBtn,
       this.recBtn,
       this.fpsLabel,
     );
@@ -136,6 +140,7 @@ export class ControlPanel {
     editBtn.addEventListener('click', () => cb.onOpenEditor());
     tracksBtn.addEventListener('click', () => cb.onToggleTracks());
     aiBtn.addEventListener('click', () => cb.onOpenGenerator());
+    settingsBtn.addEventListener('click', () => cb.onOpenSettings());
     this.recBtn.addEventListener('click', () => void this.toggleRecord());
 
     this.scrubber.addEventListener('pointerdown', () => {
@@ -283,6 +288,14 @@ export class ControlPanel {
       case 'g':
       case 'G':
         this.cb.onOpenGenerator();
+        break;
+      case 'o':
+      case 'O':
+        this.cb.onOpenSettings();
+        break;
+      case 'l':
+      case 'L':
+        this.cb.onToggleSubtitles();
         break;
       case 'v':
       case 'V':

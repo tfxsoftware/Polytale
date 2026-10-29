@@ -238,6 +238,17 @@ Campos comuns a **todos** os eventos:
 - `text` (obrigatório) é a legenda e o texto sintetizado no fallback.
 - `audio` opcional (arquivos em `public/audio/`). Com áudio, a duração real do arquivo é usada.
 - `duration` opcional força o tempo de fala; `hold` = tempo extra da legenda (padrão 0.5 s).
+- `"subtitle": false` esconde a legenda só desta fala (o áudio e o lipsync continuam).
+- Visual das legendas: bloco opcional `subtitles` no topo do script (ao lado de `meta`). Só inclua se o
+  usuário pedir algo diferente do padrão:
+
+```json
+"subtitles": { "enabled": true, "style": "plain", "position": "bottom", "showName": false, "typewriter": false,
+               "size": 1.2, "color": "#ffffff", "background": "rgba(0,0,0,0.6)", "border": "#ffd166", "font": "VT323" }
+```
+
+  `style`: `box` (caixa estilo RPG, padrão) ou `plain` (texto de cinema com contorno); `position`: `bottom` ou `top`;
+  `enabled: false` desliga todas as legendas; `background`/`border` valem só para `box`.
 - Volume (RMS) abre a mandíbula (`jawOpen`); agudos esticam a boca, graves arredondam.
 
 ### 4.5 `CAMERA_CUT` / `CAMERA_TRANSITION` — câmera

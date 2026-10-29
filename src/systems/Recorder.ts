@@ -1,10 +1,11 @@
 import type { ActiveDialogue } from '../timeline/types';
-import { revealedChars, type SpeakerInfo } from '../ui/DialogueBox';
+import { drawSubtitles, visibleDialogues, type SpeakerInfo, type SubtitleStyle } from '../ui/SubtitleRenderer';
 import { titleCardOpacity, type TitleCardState } from '../ui/TitleCard';
 
 export interface RecorderOverlay {
   dialogues: ActiveDialogue[];
   titleCard: TitleCardState | null;
+  subtitles: SubtitleStyle;
   speaker(actorId: string): SpeakerInfo;
 }
 
@@ -85,7 +86,7 @@ export class Recorder {
     }
     ctx.drawImage(this.source, 0, 0, composite.width, composite.height);
     this.drawTitleCard(overlay.titleCard);
-    this.drawDialogues(overlay.dialogues, overlay.speaker);
+    this.drawDialogues(visibleDialogues(overlay.dialogues, overlay.subtitles), overlay.subtitles, overlay.speaker);
   }
 
   async stop(): Promise<Blob | null> {
@@ -149,69 +150,10 @@ export class Recorder {
     ctx.restore();
   }
 
-  private drawDialogues(dialogues: ActiveDialogue[], speaker: (id: string) => SpeakerInfo): void {
-    if (!dialogues.length || !this.ctx || !this.composite) return;
-    const { ctx, composite } = this;
+  private drawDialogues(dialogues: ActiveDialogue[], style: SubtitleStyle, speaker: (id: string) => SpeakerInfo): void {
+    if (!this.ctx || !this.composite) return;
     const k = this.scale();
-    const pad = 14 * k;
-    const width = Math.min(880 * k, composite.width - 32 * k);
-    const x = (composite.width - width) / 2;
-    const textSize = Math.round(28 * k);
-    const nameSize = Math.round(24 * k);
-    let bottom = composite.height - 28 * k;
-
-    for (const d of [...dialogues].reverse()) {
-      const info = speaker(d.actorId);
-      ctx.font = `${textSize}px VT323, ui-monospace, monospace`;
-      const lines = wrap(ctx, d.text, width - pad * 2);
-      // Revela os caracteres linha a linha (máquina de escrever).
-      let remaining = revealedChars(d);
-      const shown = lines.map((l) => {
-        const part = l.slice(0, Math.max(0, remaining));
-        remaining -= l.length + 1;
-        return part;
-      });
-      const height = pad * 2 + nameSize + lines.length * textSize * 1.12;
-      const y = bottom - height;
-
-      ctx.fillStyle = 'rgba(12, 15, 44, 0.92)';
-      ctx.fillRect(x, y, width, height);
-      ctx.strokeStyle = '#c9d1ff';
-      ctx.lineWidth = 3 * k;
-      ctx.strokeRect(x, y, width, height);
-
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.font = `${nameSize}px VT323, ui-monospace, monospace`;
-      ctx.fillStyle = '#000';
-      ctx.fillText(info.name.toUpperCase(), x + pad + 2 * k, y + pad + 2 * k);
-      ctx.fillStyle = info.color;
-      ctx.fillText(info.name.toUpperCase(), x + pad, y + pad);
-
-      ctx.font = `${textSize}px VT323, ui-monospace, monospace`;
-      shown.forEach((line, i) => {
-        const ly = y + pad + nameSize + i * textSize * 1.12;
-        ctx.fillStyle = '#000';
-        ctx.fillText(line, x + pad + 2 * k, ly + 2 * k);
-        ctx.fillStyle = '#e8ecff';
-        ctx.fillText(line, x + pad, ly);
-      });
-      bottom = y - 8 * k;
-    }
+    const { width, height } = this.composite;
+    drawSubtitles(this.ctx, { width, height, scale: k, inset: (style.position === 'top' ? 24 : 28) * k, time: performance.now() / 1000 }, dialogues, style, speaker);
   }
-}
-
-function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
-  const words = text.split(/\s+/);
-  const lines: string[] = [];
-  let line = '';
-  for (const w of words) {
-    const test = line ? `${line} ${w}` : w;
-    if (ctx.measureText(test).width > maxWidth && line) {
-      lines.push(line);
-      line = w;
-    } else line = test;
-  }
-  if (line) lines.push(line);
-  return lines;
 }

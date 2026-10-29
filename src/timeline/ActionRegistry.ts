@@ -512,6 +512,7 @@ function createDefaultHandlers(): HandlerMap {
         if (typeof ev.text !== 'string') errs.push(`'text' (legenda) é obrigatório`);
         if (ev.audio !== undefined && typeof ev.audio !== 'string') errs.push(`'audio' deve ser uma URL`);
         if (ev.hold !== undefined && (!isNum(ev.hold) || ev.hold < 0)) errs.push(`'hold' deve ser >= 0`);
+        if (ev.subtitle !== undefined && typeof ev.subtitle !== 'boolean') errs.push(`'subtitle' deve ser true ou false`);
         return errs;
       },
       interval(ev, ctx) {
@@ -530,6 +531,7 @@ function createDefaultHandlers(): HandlerMap {
               start: ev.time,
               speakDuration: speak,
               localTime: local,
+              subtitle: ev.subtitle ?? true,
             });
           },
         };

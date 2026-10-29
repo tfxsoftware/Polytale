@@ -15,7 +15,9 @@ import { ControlPanel } from './ui/ControlPanel';
 import { TimelineEditor } from './ui/TimelineEditor';
 import { TimelineView } from './ui/TimelineView';
 import { GeneratorPanel } from './ui/GeneratorPanel';
-import { DialogueBox, type SpeakerInfo } from './ui/DialogueBox';
+import { DialogueBox } from './ui/DialogueBox';
+import { SettingsPanel } from './ui/SettingsPanel';
+import { resolveSubtitles, type SpeakerInfo, type SubtitleStyle } from './ui/SubtitleRenderer';
 import { TitleCard, type TitleCardState } from './ui/TitleCard';
 import { defaultScript } from './config/defaultScript';
 
@@ -52,6 +54,9 @@ let currentScript: unknown = defaultScript;
 let lastFrame: FrameState | null = null;
 let overlay: { dialogues: ActiveDialogue[]; titleCard: TitleCardState | null } = { dialogues: [], titleCard: null };
 let resumeAfterScrub = false;
+/** Legendas do roteiro; `subtitlesHidden` é o atalho L (vale para a tela e o vídeo). */
+let subtitles: SubtitleStyle = resolveSubtitles(undefined);
+let subtitlesHidden = false;
 
 const speaker = (actorId: string): SpeakerInfo => {
   const def = chapter?.story.objects.get(actorId);
@@ -92,8 +97,30 @@ const panel = new ControlPanel(ui, {
     timeline.pause();
     void generator.open();
   },
+  onToggleSubtitles: () => {
+    subtitlesHidden = !subtitlesHidden;
+    applySubtitles();
+    panel.setStatus(subtitlesHidden ? 'Legendas ocultas (L para mostrar).' : 'Legendas visíveis.');
+  },
+  onOpenSettings: () => {
+    if (isScript(currentScript)) settings.toggle(currentScript.subtitles);
+  },
   onToggleTracks: () => {
     if (isScript(currentScript)) tracks.toggle(currentScript, chapter?.index ?? 0);
+  },
+});
+
+const settings = new SettingsPanel(ui, {
+  onSubtitlesChange: (def) => {
+    if (!isScript(currentScript) || !project) return;
+    // Só muda a apresentação: atualiza o roteiro sem recompilar a história.
+    const next: StoryScript = { ...currentScript, subtitles: def };
+    if (!def) delete next.subtitles;
+    currentScript = next;
+    project.script = next;
+    applySubtitles();
+    saveDraft(next);
+    if (tracks.isOpen) tracks.setScript(next, chapter?.index ?? 0);
   },
 });
 
@@ -126,6 +153,12 @@ const generator = new GeneratorPanel(ui, {
     panel.setStatus('Roteiro gerado pela IA aplicado — aperte ▶ para assistir.');
   },
 });
+
+function applySubtitles(): void {
+  const style = resolveSubtitles(project?.script.subtitles);
+  subtitles = subtitlesHidden ? { ...style, enabled: false } : style;
+  dialogue.setStyle(subtitles);
+}
 
 function isScript(v: unknown): v is StoryScript {
   return typeof v === 'object' && v !== null && 'meta' in v;
@@ -167,6 +200,7 @@ async function loadStory(raw: unknown, options: LoadOptions = {}): Promise<strin
     compiled.warnings.forEach((w) => console.warn(`[StoryScript] ${w}`));
 
     project = compiled;
+    applySubtitles();
     builtChapter = -1; // força reconstruir a cena do capítulo atual
     currentScript = raw;
     timeline.setDuration(compiled.duration);
@@ -282,7 +316,7 @@ engine.onResize((w, h) => post.setSize(w, h));
 engine.setRenderer((dt) => {
   post.render(dt);
   // Copiado logo após o render (antes do navegador limpar o buffer WebGL).
-  recorder.captureFrame({ ...overlay, speaker });
+  recorder.captureFrame({ ...overlay, subtitles, speaker });
 });
 
 /* -------------------------------------------------------------------------- */

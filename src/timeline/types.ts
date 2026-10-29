@@ -458,6 +458,8 @@ export interface PlayAudioWithLipsyncEvent extends EventBase {
   volume?: number;
   /** Tempo extra da legenda na tela após a fala. */
   hold?: number;
+  /** false = fala sem legenda (o áudio e o lipsync continuam). */
+  subtitle?: boolean;
 }
 
 export interface CameraCutEvent extends EventBase, CameraShotSpec {
@@ -666,8 +668,33 @@ export interface ChapterDef {
   showTitle?: boolean;
 }
 
+export const SUBTITLE_STYLES = ['box', 'plain'] as const;
+export const SUBTITLE_POSITIONS = ['bottom', 'top'] as const;
+
+/** Visual das legendas (tela e vídeo exportado). */
+export interface SubtitleDef {
+  /** false = sem legendas. Padrão true. */
+  enabled?: boolean;
+  /** 'box' = caixa estilo RPG (padrão); 'plain' = texto de cinema com contorno. */
+  style?: (typeof SUBTITLE_STYLES)[number];
+  position?: (typeof SUBTITLE_POSITIONS)[number];
+  /** Mostra o nome de quem fala. Padrão true. */
+  showName?: boolean;
+  /** Revela o texto letra a letra. Padrão true. */
+  typewriter?: boolean;
+  /** Multiplicador do tamanho do texto (1 = padrão). */
+  size?: number;
+  color?: string;
+  /** Fundo e borda da caixa (style 'box'). */
+  background?: string;
+  border?: string;
+  /** Família de fonte CSS (padrão 'VT323'). */
+  font?: string;
+}
+
 export interface StoryScript {
   meta: StoryMeta;
+  subtitles?: SubtitleDef;
   scene?: SceneDef;
   fx?: FxDef;
   cameras?: CameraShotDef[];
@@ -777,6 +804,8 @@ export interface ActiveDialogue {
   /** Tempo de fala (sem o hold). */
   speakDuration: number;
   localTime: number;
+  /** Se a fala aparece nas legendas. */
+  subtitle: boolean;
 }
 
 export interface ActiveSound {

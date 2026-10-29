@@ -1,5 +1,5 @@
 import { ActionRegistry, StoryScriptError, type CompileOptions, type CompiledStory } from './ActionRegistry';
-import type { ChapterDef, EventType, FrameState, StoryScript } from './types';
+import { SUBTITLE_POSITIONS, SUBTITLE_STYLES, type ChapterDef, type EventType, type FrameState, type StoryScript } from './types';
 import { clamp01 } from '../utils/math';
 
 /** Duração das transições em fade entre capítulos (cada metade). */
@@ -81,6 +81,7 @@ function validateProjectStructure(raw: unknown): string[] {
       if (c.transition !== undefined && c.transition !== 'fade' && c.transition !== 'cut') errs.push(`chapters[${i}]: 'transition' deve ser 'fade' ou 'cut'`);
     });
   }
+  if (raw.subtitles !== undefined) errs.push(...validateSubtitles(raw.subtitles));
   if (raw.cast !== undefined) {
     if (!isObj(raw.cast)) errs.push(`'cast' deve ser um objeto { id: definição }`);
     else
@@ -88,6 +89,24 @@ function validateProjectStructure(raw: unknown): string[] {
         if (!isObj(def) || (def.kind !== 'actor' && def.kind !== 'prop')) errs.push(`cast.${id}: 'kind' deve ser 'actor' ou 'prop'`);
       }
   }
+  return errs;
+}
+
+function validateSubtitles(s: unknown): string[] {
+  if (!isObj(s)) return [`'subtitles' deve ser um objeto`];
+  const errs: string[] = [];
+  const oneOf = (field: string, list: readonly string[]) => {
+    if (s[field] !== undefined && !list.includes(String(s[field]))) errs.push(`'subtitles.${field}' inválido (use ${list.join(', ')})`);
+  };
+  oneOf('style', SUBTITLE_STYLES);
+  oneOf('position', SUBTITLE_POSITIONS);
+  for (const f of ['enabled', 'showName', 'typewriter']) {
+    if (s[f] !== undefined && typeof s[f] !== 'boolean') errs.push(`'subtitles.${f}' deve ser true ou false`);
+  }
+  for (const f of ['color', 'background', 'border', 'font']) {
+    if (s[f] !== undefined && typeof s[f] !== 'string') errs.push(`'subtitles.${f}' deve ser uma string`);
+  }
+  if (s.size !== undefined && (typeof s.size !== 'number' || !(s.size > 0))) errs.push(`'subtitles.size' deve ser um número > 0`);
   return errs;
 }
 

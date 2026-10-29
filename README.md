@@ -71,6 +71,8 @@ The demo *A Chama Antiga* ("The Ancient Flame", 60 s, in Portuguese) starts play
 | `T` | Toggle the visual track editor |
 | `G` | Generate a script with AI |
 | `V` | Record a `.webm` video from start to end (press again to stop early) |
+| `O` | Options: subtitle style editor with live preview (saved into the script) |
+| `L` | Show / hide subtitles (also applies to recordings) |
 
 Your last applied script is kept in the browser and restored on reload ("Restaurar demo" in the editor
 brings the demo back). A shared link (`#story=...`) loads the script embedded in the URL.
@@ -117,6 +119,11 @@ characters — see section 3.7 of `skills.md`.
 | Acting | `SET_LOOK_TARGET`, `SET_EXPRESSION`, `PLAY_GESTURE`, `PLAY_ANIMATION` |
 | Body | `SET_POSE`, `REACH`, `ATTACH_OBJECT`, `DETACH_OBJECT`, `INTERACT` |
 | Light & effects | `SET_LIGHT`, `SET_TIME_OF_DAY`, `SET_RETRO_FX`, `FADE_SCREEN`, `FLASH_SCREEN` |
+
+Subtitles are styled in the **⚙ OPÇÕES** panel (`O`), which writes an optional top-level `subtitles` block (`style: "box" | "plain"`,
+`position`, `showName`, `typewriter`, `size`, `color`, `background`, `border`, `font`, or
+`enabled: false` to turn them off); a single line can opt out with `"subtitle": false`. The same
+style is used on screen and in exported videos.
 
 The full reference (fields, accepted values, directing rules, and a dialogue timing guide of
 roughly 1 s per 12–15 characters) is in **[`skills.md`](./skills.md)**.
