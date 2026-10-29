@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import type { CameraShotDef, CameraShotSpec, CameraValue, FrameState, PointRef, ShakeState } from '../timeline/types';
+import type { CameraDriftSpec, CameraShotDef, CameraShotSpec, CameraValue, FrameState, PointRef, ShakeState } from '../timeline/types';
 import type { Actor } from '../core/Actor';
-import { DEG2RAD, fbm1D, noise1D } from '../utils/math';
+import { clamp, DEG2RAD, fbm1D, noise1D } from '../utils/math';
 
 /** Fornece atores ao diretor (implementado pelo SceneManager). */
 export interface ActorProvider {
@@ -78,7 +78,7 @@ export class CameraDirector {
 
   /** Resolve recursivamente um CameraValue em pose (Lerp/Slerp entre planos). */
   resolve(value: CameraValue, time: number): CameraPose {
-    if (value.kind === 'shot') return this.resolveSpec(value.spec, time);
+    if (value.kind === 'shot') return this.resolveSpec(value.spec, value.start, time);
     const a = this.resolve(value.from, time);
     const b = this.resolve(value.to, time);
     const t = value.alpha;
@@ -91,7 +91,7 @@ export class CameraDirector {
 
   /* ---------------------------------------------------------------------- */
 
-  private resolveSpec(spec: CameraShotSpec, time: number): CameraPose {
+  private resolveSpec(spec: CameraShotSpec, start: number, time: number): CameraPose {
     let position: THREE.Vector3;
     let target: THREE.Vector3;
     let fov = DEFAULT_FOV;
@@ -113,6 +113,7 @@ export class CameraDirector {
     }
     if (spec.fov !== undefined) fov = spec.fov;
     if (spec.offset) position.add(this.tmpA.set(spec.offset[0], spec.offset[1], spec.offset[2]));
+    if (spec.drift) this.applyDrift(spec.drift, position, target, clamp(time - start, 0, spec.drift.duration ?? Infinity));
 
     // "Câmera na mão": deriva lenta e determinística.
     if (handheld > 0) {
@@ -125,6 +126,19 @@ export class CameraDirector {
 
     const quaternion = this.lookQuaternion(position, target, roll);
     return { position, quaternion, fov };
+  }
+
+  /** Deriva contínua desde o início do plano: `push` aproxima do alvo, `pan` orbita em torno dele. */
+  private applyDrift(drift: CameraDriftSpec, position: THREE.Vector3, target: THREE.Vector3, elapsed: number): void {
+    if (drift.push) {
+      const dir = this.tmpB.subVectors(target, position).setY(0).normalize();
+      position.addScaledVector(dir, drift.push * elapsed);
+    }
+    if (drift.pan) {
+      const angle = drift.pan * DEG2RAD * elapsed;
+      const offset = this.tmpC.copy(position).sub(target).applyAxisAngle(UP, angle);
+      position.copy(target).add(offset);
+    }
   }
 
   private lookQuaternion(position: THREE.Vector3, target: THREE.Vector3, roll: number): THREE.Quaternion {

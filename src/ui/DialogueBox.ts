@@ -11,6 +11,7 @@ import {
   type SpeakerInfo,
   type SubtitleStyle,
 } from './SubtitleRenderer';
+import { drawWatermark, type WatermarkStyle } from './Watermark';
 
 /** Espaço livre acima do painel de controle (px). */
 const BOTTOM_INSET = 96;
@@ -28,6 +29,7 @@ export class DialogueBox {
   private readonly live: HTMLDivElement;
   private lastSignature = '';
   private style: SubtitleStyle = SUBTITLE_DEFAULTS;
+  private watermark: WatermarkStyle | null = null;
   /** Quadro com formato fixo (meta.aspect): mesmas proporções do vídeo exportado. */
   private framed = false;
 
@@ -49,6 +51,11 @@ export class DialogueBox {
 
   setStyle(style: SubtitleStyle): void {
     this.style = style;
+    this.clear();
+  }
+
+  setWatermark(watermark: WatermarkStyle | null): void {
+    this.watermark = watermark;
     this.clear();
   }
 
@@ -89,6 +96,7 @@ export class DialogueBox {
     const scale = this.framed ? subtitleScale(width, height) : 1;
     const inset = this.framed ? subtitleInset(style.position, width, height, scale) : style.position === 'top' ? TOP_INSET : BOTTOM_INSET;
     drawSubtitles(this.ctx, { width, height, scale, inset, time, anchor }, visible, style, this.speaker);
+    if (this.watermark) drawWatermark(this.ctx, width, height, this.watermark);
 
     const spoken = visible.map((d) => `${this.speaker(d.actorId).name}: ${d.text}`).join(' ');
     if (this.live.textContent !== spoken) this.live.textContent = spoken;

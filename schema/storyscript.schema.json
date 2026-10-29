@@ -81,6 +81,9 @@
         "aspect": {
           "$ref": "#/definitions/AspectRatio",
           "description": "Formato do quadro: '16:9' (paisagem), '9:16' (vertical: Reels, TikTok, Shorts) ou '1:1'. A tela mostra o quadro com tarjas e o vídeo sai em 1080p nesse formato. Sem `aspect`, a cena ocupa a janela inteira."
+        },
+        "watermark": {
+          "$ref": "#/definitions/WatermarkDef"
         }
       },
       "required": [
@@ -96,6 +99,45 @@
         "1:1"
       ]
     },
+    "WatermarkDef": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "image": {
+          "type": "string",
+          "description": "URL/data URI de uma imagem (logo), desenhada ao lado do texto."
+        },
+        "position": {
+          "$ref": "#/definitions/WatermarkPosition",
+          "description": "Padrão 'bottom-right'."
+        },
+        "opacity": {
+          "type": "number",
+          "description": "0..1. Padrão 0.8."
+        },
+        "size": {
+          "type": "number",
+          "description": "Tamanho do texto em px (720p); escala com o quadro como as legendas. Padrão 22."
+        },
+        "color": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "description": "Marca d'água fixa sobre a cena (tela e vídeo exportado). `text` e/ou `image` — pelo menos um."
+    },
+    "WatermarkPosition": {
+      "type": "string",
+      "enum": [
+        "top-left",
+        "top-right",
+        "bottom-left",
+        "bottom-right",
+        "center"
+      ]
+    },
     "SubtitleDef": {
       "type": "object",
       "properties": {
@@ -107,9 +149,10 @@
           "type": "string",
           "enum": [
             "box",
-            "plain"
+            "plain",
+            "outline"
           ],
-          "description": "'box' = caixa estilo RPG (padrão); 'plain' = texto de cinema com contorno."
+          "description": "'box' = caixa estilo RPG (padrão); 'plain' = texto de cinema com contorno; 'outline' = contorno + sombra projetada."
         },
         "position": {
           "type": "string",
@@ -131,7 +174,20 @@
         },
         "typewriter": {
           "type": "boolean",
-          "description": "Revela o texto letra a letra. Padrão true."
+          "description": "Revela o texto letra a letra. Padrão true. Ignorado quando `mode` não é 'typewriter'."
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "typewriter",
+            "words",
+            "chunk"
+          ],
+          "description": "Como o texto da fala aparece: 'typewriter' (a linha inteira, letra a letra — padrão); 'words' (grupos de até `maxWords` palavras que crescem palavra a palavra e são substituídos pelo próximo grupo, estilo TikTok/Reels); 'chunk' (como 'words', mas cada grupo aparece de uma vez, sem revelação progressiva)."
+        },
+        "maxWords": {
+          "type": "number",
+          "description": "Palavras por grupo nos modos 'words' (1–4 típico) e 'chunk' (6–8 típico). Padrão 3."
         },
         "size": {
           "type": "number",
@@ -490,9 +546,22 @@
             }
           },
           "additionalProperties": false
+        },
+        "grade": {
+          "$ref": "#/definitions/ColorGrade",
+          "description": "Correção de cor independente do retro FX (também funciona com ele desligado). Padrão 'none'."
         }
       },
       "additionalProperties": false
+    },
+    "ColorGrade": {
+      "type": "string",
+      "enum": [
+        "none",
+        "warm",
+        "cool",
+        "noir"
+      ]
     },
     "CameraShotDef": {
       "type": "object",
@@ -701,6 +770,10 @@
           "items": {
             "$ref": "#/definitions/Accessory"
           }
+        },
+        "subtitle": {
+          "$ref": "#/definitions/ActorSubtitleStyle",
+          "description": "Visual das legendas deste ator, por cima do bloco `subtitles` do roteiro (ex.: fonte itálica para um personagem, serifada para outro)."
         }
       },
       "required": [
@@ -831,6 +904,24 @@
         "cape"
       ]
     },
+    "ActorSubtitleStyle": {
+      "type": "object",
+      "properties": {
+        "font": {
+          "type": "string",
+          "description": "Família de fonte CSS do texto falado por este ator."
+        },
+        "color": {
+          "type": "string",
+          "description": "Cor do texto falado por este ator (o nome continua usando `color`)."
+        },
+        "size": {
+          "type": "number",
+          "description": "Multiplicador do tamanho do texto deste ator (substitui `subtitles.size`)."
+        }
+      },
+      "additionalProperties": false
+    },
     "PropObjectDef": {
       "type": "object",
       "properties": {
@@ -922,6 +1013,9 @@
         },
         {
           "$ref": "#/definitions/PlaySoundEvent"
+        },
+        {
+          "$ref": "#/definitions/ShowTitleEvent"
         }
       ]
     },
@@ -1155,6 +1249,10 @@
         "handheld": {
           "type": "number"
         },
+        "drift": {
+          "$ref": "#/definitions/CameraDriftSpec",
+          "description": "Deriva lenta e contínua enquanto o plano estiver ativo (dolly-in / pan), em vez de uma câmera estática. Aplicada por segundo desde o início do plano."
+        },
         "time": {
           "type": "number",
           "description": "Instante de início em segundos."
@@ -1192,6 +1290,23 @@
         "low_angle"
       ]
     },
+    "CameraDriftSpec": {
+      "type": "object",
+      "properties": {
+        "push": {
+          "type": "number"
+        },
+        "pan": {
+          "type": "number"
+        },
+        "duration": {
+          "type": "number",
+          "description": "Depois desse tempo (s) a deriva para no valor atingido. Padrão: sem limite."
+        }
+      },
+      "additionalProperties": false,
+      "description": "`push`: metros/s na direção do alvo (positivo aproxima). `pan`: graus/s em torno do alvo (eixo Y)."
+    },
     "CameraTransitionEvent": {
       "type": "object",
       "properties": {
@@ -1226,6 +1341,10 @@
         },
         "handheld": {
           "type": "number"
+        },
+        "drift": {
+          "$ref": "#/definitions/CameraDriftSpec",
+          "description": "Deriva lenta e contínua enquanto o plano estiver ativo (dolly-in / pan), em vez de uma câmera estática. Aplicada por segundo desde o início do plano."
         },
         "time": {
           "type": "number",
@@ -2131,11 +2250,62 @@
         },
         "loop": {
           "type": "boolean"
+        },
+        "bus": {
+          "$ref": "#/definitions/SoundBus",
+          "description": "'sfx' (padrão) ou 'music' — a trilha 'music' abaixa automaticamente enquanto alguém fala."
         }
       },
       "required": [
         "src",
         "time",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "SoundBus": {
+      "type": "string",
+      "enum": [
+        "sfx",
+        "music"
+      ]
+    },
+    "ShowTitleEvent": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Segundos em tela (padrão 3)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "SHOW_TITLE"
+        },
+        "title": {
+          "type": "string"
+        },
+        "subtitle": {
+          "type": "string"
+        },
+        "overlay": {
+          "type": "boolean",
+          "description": "true = só o texto (com sombra), sem a faixa escura — para sobrepor a uma cena em andamento. Padrão false."
+        }
+      },
+      "required": [
+        "time",
+        "title",
         "type"
       ],
       "additionalProperties": false

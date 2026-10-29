@@ -1,5 +1,16 @@
 import { ActionRegistry, StoryScriptError, type CompileOptions, type CompiledStory } from './ActionRegistry';
-import { ASPECT_RATIOS, SUBTITLE_POSITIONS, SUBTITLE_STYLES, type AspectRatio, type ChapterDef, type EventType, type FrameState, type StoryScript } from './types';
+import {
+  ASPECT_RATIOS,
+  SUBTITLE_MODES,
+  SUBTITLE_POSITIONS,
+  SUBTITLE_STYLES,
+  WATERMARK_POSITIONS,
+  type AspectRatio,
+  type ChapterDef,
+  type EventType,
+  type FrameState,
+  type StoryScript,
+} from './types';
 import { clamp01 } from '../utils/math';
 
 /** Duração das transições em fade entre capítulos (cada metade). */
@@ -38,7 +49,7 @@ export interface ProjectFrame {
   /** Estado do capítulo no tempo local (frame.time é local ao capítulo). */
   frame: FrameState;
   /** Cartela de título ativa (null se nenhuma). */
-  titleCard: { title: string; subtitle: string; progress: number } | null;
+  titleCard: { title: string; subtitle: string; progress: number; overlay: boolean } | null;
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -70,6 +81,7 @@ function validateProjectStructure(raw: unknown): string[] {
   if (isObj(raw.meta) && raw.meta.aspect !== undefined && !ASPECT_RATIOS.includes(raw.meta.aspect as AspectRatio)) {
     errs.push(`'meta.aspect' inválido (use ${ASPECT_RATIOS.join(', ')})`);
   }
+  if (isObj(raw.meta) && raw.meta.watermark !== undefined) errs.push(...validateWatermark(raw.meta.watermark));
   const hasTimeline = Array.isArray(raw.timeline);
   const hasChapters = Array.isArray(raw.chapters);
   if (!hasTimeline && !hasChapters) errs.push(`informe 'timeline' (cena única) ou 'chapters' (capítulos)`);
@@ -103,6 +115,7 @@ function validateSubtitles(s: unknown): string[] {
   };
   oneOf('style', SUBTITLE_STYLES);
   oneOf('position', SUBTITLE_POSITIONS);
+  oneOf('mode', SUBTITLE_MODES);
   for (const f of ['enabled', 'showName', 'typewriter']) {
     if (s[f] !== undefined && typeof s[f] !== 'boolean') errs.push(`'subtitles.${f}' deve ser true ou false`);
   }
@@ -111,6 +124,22 @@ function validateSubtitles(s: unknown): string[] {
   }
   if (s.size !== undefined && (typeof s.size !== 'number' || !(s.size > 0))) errs.push(`'subtitles.size' deve ser um número > 0`);
   if (s.margin !== undefined && (typeof s.margin !== 'number' || !(s.margin >= 0))) errs.push(`'subtitles.margin' deve ser um número >= 0`);
+  if (s.maxWords !== undefined && (typeof s.maxWords !== 'number' || !(s.maxWords >= 1))) errs.push(`'subtitles.maxWords' deve ser um número >= 1`);
+  return errs;
+}
+
+function validateWatermark(w: unknown): string[] {
+  if (!isObj(w)) return [`'meta.watermark' deve ser um objeto`];
+  const errs: string[] = [];
+  if (!w.text && !w.image) errs.push(`'meta.watermark' precisa de 'text' e/ou 'image'`);
+  if (w.position !== undefined && !WATERMARK_POSITIONS.includes(w.position as (typeof WATERMARK_POSITIONS)[number])) {
+    errs.push(`'meta.watermark.position' inválido (use ${WATERMARK_POSITIONS.join(', ')})`);
+  }
+  for (const f of ['text', 'image', 'color']) {
+    if (w[f] !== undefined && typeof w[f] !== 'string') errs.push(`'meta.watermark.${f}' deve ser uma string`);
+  }
+  if (w.opacity !== undefined && (typeof w.opacity !== 'number' || w.opacity < 0 || w.opacity > 1)) errs.push(`'meta.watermark.opacity' deve ser um número entre 0 e 1`);
+  if (w.size !== undefined && (typeof w.size !== 'number' || !(w.size > 0))) errs.push(`'meta.watermark.size' deve ser um número > 0`);
   return errs;
 }
 
@@ -181,10 +210,12 @@ export function evaluateProject(registry: ActionRegistry, project: CompiledProje
     frame.fx.fadeColor = [0, 0, 0];
   }
 
+  // Uma cartela SHOW_TITLE explícita no roteiro tem prioridade sobre a automática do capítulo.
   const titleCard =
-    chapter.showTitle && local < TITLE_CARD_DURATION
-      ? { title: chapter.title, subtitle: `Capítulo ${chapter.index + 1}`, progress: local / TITLE_CARD_DURATION }
-      : null;
+    frame.titleCard ??
+    (chapter.showTitle && local < TITLE_CARD_DURATION
+      ? { title: chapter.title, subtitle: `Capítulo ${chapter.index + 1}`, progress: local / TITLE_CARD_DURATION, overlay: false }
+      : null);
 
   return { chapter, frame, titleCard };
 }

@@ -329,11 +329,12 @@ export class ActionRegistry {
       objects: {},
       actors: {},
       lights: {},
-      camera: { kind: 'shot', spec: shots.size ? { shot: shots.keys().next().value as string } : { preset: 'wide' } },
+      camera: { kind: 'shot', spec: shots.size ? { shot: shots.keys().next().value as string } : { preset: 'wide' }, start: 0 },
       shakes: [],
       fx: {
         retro: script.fx?.retro ?? true,
         settings: { ...DEFAULT_RETRO_SETTINGS, ...(script.fx?.settings ?? {}) },
+        grade: script.fx?.grade ?? 'none',
         fade: 0,
         fadeColor: [0, 0, 0],
         flash: 0,
@@ -342,6 +343,7 @@ export class ActionRegistry {
       hour: typeof script.scene?.timeOfDay === 'number' ? script.scene.timeOfDay : null,
       dialogues: [],
       sounds: [],
+      titleCard: null,
     };
 
     for (const [id, def] of objects) {

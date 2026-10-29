@@ -175,6 +175,8 @@ próprio cenário; eles tocam em sequência, com transição em fade e cartela "
 - **Cada capítulo começa do zero**: o `time` dos eventos é relativo ao início do capítulo, e todo ator precisa de
   `SPAWN_OBJECT` no capítulo em que aparece (posições, poses e objetos segurados não passam de um capítulo para outro).
 - Os 3 primeiros segundos mostram a cartela do título: comece as falas depois de ~2,5 s.
+- Para uma cartela em qualquer outro ponto da história (ex.: título final sobre a cena ainda tocando), use o evento
+  `SHOW_TITLE` (ver 4.12) em vez de `showTitle` do capítulo.
 Props em `scene.props` são estáticos. Props que precisam aparecer/mover usam `SPAWN_OBJECT` com `{"kind": "prop"}`.
 
 ---
@@ -202,7 +204,12 @@ Campos comuns a **todos** os eventos:
 ```
 
 - `object.kind = "actor"`: `name` (legenda), `color` (cor do nome), `height` (m), `palette`, `voice`,
-  `model` (GLB opcional, com morphs ARKit como `jawOpen`/`eyeBlinkLeft`), `idleClip`.
+  `model` (GLB opcional, com morphs ARKit como `jawOpen`/`eyeBlinkLeft`), `idleClip`, `subtitle`
+  (opcional — ver abaixo).
+- `subtitle: { font?, color?, size? }`: visual da legenda **só da fala desse ator**, por cima do bloco
+  `subtitles` do roteiro (`color` aqui é o texto falado; o nome continua na `color` de cima). Útil para
+  diferenciar personagens, ex.: `"subtitle": { "font": "Georgia", "color": "#ffd1f0" }` para um humano e
+  `"subtitle": { "font": "monospace", "size": 0.85 }` para um robô.
 - `object.kind = "prop"`: `prop` (tipo), `color`, `model`.
 - `voice.engine`:
   - `"speech"` (padrão) — voz nativa do navegador (`window.speechSynthesis`), lipsync estimado pelo texto.
@@ -248,10 +255,17 @@ Campos comuns a **todos** os eventos:
                "size": 1.2, "color": "#ffffff", "background": "rgba(0,0,0,0.6)", "border": "#ffd166", "font": "VT323" }
 ```
 
-  `style`: `box` (caixa estilo RPG, padrão) ou `plain` (texto de cinema com contorno); `position`: `bottom` (padrão),
-  `top`, `center` ou `speaker` (balão sobre a cabeça de quem fala; se o ator estiver fora de quadro, a fala vai para
-  a base da tela); `margin`: distância extra da borda em px (em `speaker`, altura do balão acima da cabeça; padrão 0);
-  `enabled: false` desliga todas as legendas; `background`/`border` valem só para `box`.
+  `style`: `box` (caixa estilo RPG, padrão), `plain` (texto de cinema com contorno) ou `outline` (contorno + sombra
+  projetada, sem caixa); `position`: `bottom` (padrão), `top`, `center` ou `speaker` (balão sobre a cabeça de quem
+  fala; se o ator estiver fora de quadro, a fala vai para a base da tela); `margin`: distância extra da borda em px
+  (em `speaker`, altura do balão acima da cabeça; padrão 0); `mode`: `typewriter` (linha inteira, letra a letra —
+  padrão; controlado por `typewriter: true/false`), `words` (estilo TikTok/Reels: grupos de até `maxWords` palavras,
+  1–4 típico, que crescem palavra a palavra e são trocados pelo próximo grupo) ou `chunk` (como `words`, mas cada
+  grupo de ~6–8 palavras aparece de uma vez, sem revelação progressiva — use com `style: "outline"`); `enabled:
+  false` desliga todas as legendas; `background`/`border` valem só para `box`.
+- Marca d'água fixa (opcional, só se o usuário pedir): `meta.watermark`, ex.
+  `{ "text": "@minhahistoria", "position": "bottom-right", "opacity": 0.8 }` (`position`: `top-left`, `top-right`,
+  `bottom-left`, `bottom-right` ou `center`; `image` aceita uma URL/data URI de logo). Aparece na tela e no vídeo.
 - Volume (RMS) abre a mandíbula (`jawOpen`); agudos esticam a boca, graves arredondam.
 
 ### 4.5 `CAMERA_CUT` / `CAMERA_TRANSITION` — câmera
@@ -276,6 +290,10 @@ Campos comuns a **todos** os eventos:
 | `low_angle` | `subject` | Contra-plongée: poder, ameaça, mistério. |
 
 - Opções: `side` (`"left"`/`"right"`), `fov`, `offset` `[x,y,z]`, `handheld` (0–1, câmera na mão).
+- `drift` (opcional): deriva lenta e contínua enquanto o plano fica ativo, em vez de uma câmera parada —
+  `{ "push": 0.08, "pan": 1.5 }` (`push` m/s na direção do alvo, aproximando; `pan` graus/s orbitando o alvo;
+  `duration` opcional trava a deriva depois de tantos segundos). Use valores pequenos (push 0.03–0.12, pan 0.5–3)
+  em planos longos para dar vida sem chamar atenção.
 - Presets **acompanham** atores em movimento.
 - Em `meta.aspect: "9:16"` (vertical), os presets se adaptam sozinhos (`wide`/`two_shot` recuam para caber todos).
   Prefira `close_up`, `medium` e `over_shoulder`, que preenchem bem o quadro estreito. Em planos customizados
@@ -348,6 +366,7 @@ Campos comuns a **todos** os eventos:
 { "time": 11,   "type": "FLASH_SCREEN", "color": "#9ff7ff", "intensity": 0.9, "duration": 0.7 }
 { "time": 43.8, "type": "SET_RETRO_FX", "enabled": true, "settings": { "pixelSize": 6, "colorLevels": 16 }, "duration": 2 }
 { "time": 0,    "type": "PLAY_SOUND", "src": "procedural:wind", "loop": true, "volume": 0.45 }
+{ "time": 0,    "type": "PLAY_SOUND", "src": "trilha.mp3", "bus": "music", "loop": true, "volume": 0.6 }
 ```
 
 - `FADE_SCREEN.to`: 0 = cena visível, 1 = tela coberta.
@@ -358,6 +377,21 @@ Campos comuns a **todos** os eventos:
   `procedural:thunder`, `procedural:chime`, `procedural:drip` (gota pingando, use com `loop`),
   `procedural:hum` (zumbido de lâmpada, `loop`), `procedural:water` (torneira), `procedural:switch`
   (interruptor), `procedural:door` (porta fechando).
+- `PLAY_SOUND.bus`: `"sfx"` (padrão) ou `"music"` — a trilha `music` abaixa (-8 dB) automaticamente
+  enquanto alguém fala e volta sozinha quando ninguém fala. Use `music` para uma trilha/ambiência
+  contínua por baixo dos diálogos; `sfx` para efeitos pontuais.
+- `fx.grade` (no topo do script ou por capítulo, ao lado de `fx.retro`): `"none"` (padrão), `"warm"`
+  (pôr do sol, sombras levantadas), `"cool"` ou `"noir"` (quase dessaturado). Funciona com ou sem o
+  retro FX ligado.
+
+```json
+{ "time": 58, "type": "SHOW_TITLE", "title": "FIM", "subtitle": "obrigado por assistir", "duration": 3.5, "overlay": true }
+```
+
+- `SHOW_TITLE`: cartela de título em qualquer ponto da timeline (não só no início do capítulo) — a cena
+  continua tocando por baixo. `overlay: true` mostra só o texto com sombra, sem a faixa escura (bom para
+  um título/créditos finais sobre a cena); sem `overlay` (ou `false`) usa a mesma faixa das cartelas
+  automáticas de capítulo. `duration` padrão 3 s.
 
 ---
 

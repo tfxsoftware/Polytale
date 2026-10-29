@@ -20,6 +20,7 @@ import { GeneratorPanel } from './ui/GeneratorPanel';
 import { DialogueBox } from './ui/DialogueBox';
 import { SettingsPanel } from './ui/SettingsPanel';
 import { resolveSubtitles, type ScreenPoint, type SpeakerInfo, type SubtitleStyle } from './ui/SubtitleRenderer';
+import { resolveWatermark, type WatermarkStyle } from './ui/Watermark';
 import { TitleCard, type TitleCardState } from './ui/TitleCard';
 import { ExportOverlay } from './ui/ExportOverlay';
 import { defaultScript } from './config/defaultScript';
@@ -61,10 +62,12 @@ let resumeAfterScrub = false;
 /** Legendas do roteiro; `subtitlesHidden` é o atalho L (vale para a tela e o vídeo). */
 let subtitles: SubtitleStyle = resolveSubtitles(undefined);
 let subtitlesHidden = false;
+let watermark: WatermarkStyle | null = null;
 
 const speaker = (actorId: string): SpeakerInfo => {
   const def = chapter?.story.objects.get(actorId);
-  return def?.kind === 'actor' ? { name: def.name, color: def.color ?? '#ffffff' } : { name: actorId, color: '#ffffff' };
+  if (def?.kind !== 'actor') return { name: actorId, color: '#ffffff' };
+  return { name: def.name, color: def.color ?? '#ffffff', font: def.subtitle?.font, textColor: def.subtitle?.color, size: def.subtitle?.size };
 };
 
 const headTop = new THREE.Vector3();
@@ -196,6 +199,11 @@ function applySubtitles(): void {
   dialogue.setStyle(subtitles);
 }
 
+function applyWatermark(): void {
+  watermark = resolveWatermark(project?.script.meta.watermark);
+  dialogue.setWatermark(watermark);
+}
+
 /** meta.aspect: quadro com tarjas na tela e legendas na mesma escala do vídeo. */
 function applyFormat(): void {
   const aspect = project?.script.meta.aspect;
@@ -278,6 +286,7 @@ async function loadStory(raw: unknown, options: LoadOptions = {}): Promise<strin
 
     project = compiled;
     applySubtitles();
+    applyWatermark();
     applyFormat();
     builtChapter = -1; // força reconstruir a cena do capítulo atual
     currentScript = raw;
@@ -368,7 +377,9 @@ async function finishExport(save: boolean): Promise<void> {
   if (!save) panel.setStatus('Geração do vídeo cancelada.');
   else if (blob && blob.size > 0) {
     Recorder.download(blob, project?.script.meta.title ?? 'polytale');
-    panel.setStatus(`Vídeo baixado (${(blob.size / 1024 / 1024).toFixed(1)} MB).`);
+    const lufs = recorder.measuredLUFS;
+    const loudness = lufs !== null && Number.isFinite(lufs) ? ` · ≈${lufs.toFixed(1)} LUFS (alvo: -14)` : '';
+    panel.setStatus(`Vídeo baixado (${(blob.size / 1024 / 1024).toFixed(1)} MB${loudness}).`);
   } else panel.setStatus('Não foi possível gerar o vídeo.', 'error');
 }
 
@@ -417,7 +428,7 @@ engine.onResize((w, h) => post.setSize(w, h));
 engine.setRenderer((dt) => {
   post.render(dt);
   // Copiado logo após o render (antes do navegador limpar o buffer WebGL).
-  recorder.captureFrame({ ...overlay, subtitles, speaker, anchor: speakerAnchor });
+  recorder.captureFrame({ ...overlay, subtitles, watermark, speaker, anchor: speakerAnchor });
 });
 
 /* -------------------------------------------------------------------------- */

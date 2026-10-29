@@ -145,6 +145,12 @@
       }
       .title-card-sub { font-size: clamp(16px, 5cqw, 26px); letter-spacing: 3px; text-transform: uppercase; color: #c9d1ff; }
       .title-card-main { font-size: clamp(24px, 9cqw, 64px); color: var(--accent-2); text-shadow: 3px 3px 0 #000; text-align: center; padding: 0 16px; }
+      /* overlay: sem faixa, texto sobre a cena em andamento (ex.: cartela final). */
+      .title-card.is-overlay {
+        top: auto; bottom: 10%; height: auto; background: none; gap: 2px;
+      }
+      .title-card.is-overlay .title-card-sub,
+      .title-card.is-overlay .title-card-main { text-shadow: 0 2px 10px rgba(0, 0, 0, 0.85), 3px 3px 0 #000; }
 
       /* ---------- Gerador IA ---------- */
       .generator-modal { height: min(80vh, 720px); }

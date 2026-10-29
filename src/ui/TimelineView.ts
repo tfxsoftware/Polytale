@@ -33,6 +33,7 @@ const CATEGORY: Record<StoryEvent['type'], Category> = {
   FADE_SCREEN: 'fx',
   FLASH_SCREEN: 'fx',
   PLAY_SOUND: 'sound',
+  SHOW_TITLE: 'fx',
 };
 
 const DEFAULT_DURATION: Partial<Record<StoryEvent['type'], number>> = {

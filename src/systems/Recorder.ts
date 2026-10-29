@@ -1,11 +1,14 @@
 import type { ActiveDialogue } from '../timeline/types';
 import { drawSubtitles, subtitleInset, subtitleScale, visibleDialogues, type ScreenPoint, type SpeakerInfo, type SubtitleStyle } from '../ui/SubtitleRenderer';
 import { titleCardOpacity, type TitleCardState } from '../ui/TitleCard';
+import { drawWatermark, type WatermarkStyle } from '../ui/Watermark';
+import { LoudnessMeter } from './Loudness';
 
 export interface RecorderOverlay {
   dialogues: ActiveDialogue[];
   titleCard: TitleCardState | null;
   subtitles: SubtitleStyle;
+  watermark: WatermarkStyle | null;
   speaker(actorId: string): SpeakerInfo;
   /** Topo da cabeça de cada ator na tela (legendas em balão). */
   anchor?(actorId: string): ScreenPoint | null;
@@ -37,6 +40,11 @@ export class Recorder {
   private chunks: Blob[] = [];
   private stopped: Promise<Blob> | null = null;
   private startedAt = 0;
+  private loudnessAnalyser: AnalyserNode | null = null;
+  private loudnessMeter: LoudnessMeter | null = null;
+  private loudnessBuffer: Float32Array<ArrayBuffer> | null = null;
+  /** LUFS integrado (aproximado) medido na última gravação; null antes/sem medição. */
+  measuredLUFS: number | null = null;
 
   constructor(
     private readonly source: HTMLCanvasElement,
@@ -72,6 +80,13 @@ export class Recorder {
     this.audioOutput.connect(this.audioTap);
     for (const track of this.audioTap.stream.getAudioTracks()) stream.addTrack(track);
 
+    this.loudnessAnalyser = this.audioContext.createAnalyser();
+    this.loudnessAnalyser.fftSize = 2048;
+    this.audioOutput.connect(this.loudnessAnalyser);
+    this.loudnessMeter = new LoudnessMeter(this.audioContext.sampleRate);
+    this.loudnessBuffer = new Float32Array(this.loudnessAnalyser.fftSize);
+    this.measuredLUFS = null;
+
     const mimeType = MIME_CANDIDATES.find((m) => MediaRecorder.isTypeSupported(m)) ?? '';
     // ~8 Mbps em 1080p; nunca abaixo de 4 Mbps (o dithering retrô pesa na compressão).
     const videoBitsPerSecond = Math.max(4_000_000, Math.round(canvas.width * canvas.height * 4));
@@ -99,6 +114,11 @@ export class Recorder {
     ctx.drawImage(this.source, 0, 0, composite.width, composite.height);
     this.drawTitleCard(overlay.titleCard);
     this.drawDialogues(visibleDialogues(overlay.dialogues, overlay.subtitles), overlay);
+    if (overlay.watermark) drawWatermark(ctx, composite.width, composite.height, overlay.watermark);
+    if (this.loudnessAnalyser && this.loudnessMeter && this.loudnessBuffer) {
+      this.loudnessAnalyser.getFloatTimeDomainData(this.loudnessBuffer);
+      this.loudnessMeter.feed(this.loudnessBuffer);
+    }
   }
 
   async stop(): Promise<Blob | null> {
@@ -112,11 +132,22 @@ export class Recorder {
         /* já desconectado */
       }
     }
+    if (this.loudnessAnalyser) {
+      try {
+        this.audioOutput.disconnect(this.loudnessAnalyser);
+      } catch {
+        /* já desconectado */
+      }
+    }
+    this.measuredLUFS = this.loudnessMeter?.integrated ?? null;
     this.recorder = null;
     this.stopped = null;
     this.audioTap = null;
     this.composite = null;
     this.ctx = null;
+    this.loudnessAnalyser = null;
+    this.loudnessMeter = null;
+    this.loudnessBuffer = null;
     return blob;
   }
 
@@ -151,17 +182,34 @@ export class Recorder {
     ctx.globalAlpha = alpha;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillRect(0, composite.height * 0.36, composite.width, composite.height * 0.26);
-    ctx.fillStyle = '#c9d1ff';
-    ctx.font = `${Math.round(26 * k)}px VT323, ui-monospace, monospace`;
-    ctx.fillText(card.subtitle.toUpperCase(), composite.width / 2, composite.height * 0.43);
-    ctx.fillStyle = '#ffd166';
-    // Encolhe o título se não couber na largura (quadro vertical).
-    ctx.font = `${Math.round(64 * k)}px VT323, ui-monospace, monospace`;
-    const fit = Math.min(1, (composite.width * 0.9) / Math.max(1, ctx.measureText(card.title).width));
-    if (fit < 1) ctx.font = `${Math.floor(64 * k * fit)}px VT323, ui-monospace, monospace`;
-    ctx.fillText(card.title, composite.width / 2, composite.height * 0.52);
+    if (card.overlay) {
+      // Sem faixa: texto com sombra projetada, perto da base, por cima da cena em andamento.
+      const shadowed = (text: string, y: number, size: number, color: string) => {
+        ctx.font = `${Math.round(size * k)}px VT323, ui-monospace, monospace`;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+        ctx.fillText(text, composite.width / 2 + 2 * k, y + 2 * k);
+        ctx.fillStyle = color;
+        ctx.fillText(text, composite.width / 2, y);
+      };
+      shadowed(card.subtitle.toUpperCase(), composite.height * 0.84, 24, '#c9d1ff');
+      let titleSize = 48;
+      ctx.font = `${Math.round(titleSize * k)}px VT323, ui-monospace, monospace`;
+      const fit = Math.min(1, (composite.width * 0.9) / Math.max(1, ctx.measureText(card.title).width));
+      if (fit < 1) titleSize = Math.floor(titleSize * fit);
+      shadowed(card.title, composite.height * 0.9, titleSize, '#ffd166');
+    } else {
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(0, composite.height * 0.36, composite.width, composite.height * 0.26);
+      ctx.fillStyle = '#c9d1ff';
+      ctx.font = `${Math.round(26 * k)}px VT323, ui-monospace, monospace`;
+      ctx.fillText(card.subtitle.toUpperCase(), composite.width / 2, composite.height * 0.43);
+      ctx.fillStyle = '#ffd166';
+      // Encolhe o título se não couber na largura (quadro vertical).
+      ctx.font = `${Math.round(64 * k)}px VT323, ui-monospace, monospace`;
+      const fit = Math.min(1, (composite.width * 0.9) / Math.max(1, ctx.measureText(card.title).width));
+      if (fit < 1) ctx.font = `${Math.floor(64 * k * fit)}px VT323, ui-monospace, monospace`;
+      ctx.fillText(card.title, composite.width / 2, composite.height * 0.52);
+    }
     ctx.restore();
   }
 

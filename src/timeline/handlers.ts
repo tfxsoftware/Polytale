@@ -11,6 +11,7 @@ import {
   EXPRESSIONS,
   GESTURES,
   PROCEDURAL_SOUNDS,
+  SOUND_BUSES,
   type ActorFrame,
   type AttachValue,
   type Hand,
@@ -70,6 +71,7 @@ export function cloneFrame(f: FrameState, time: number): FrameState {
     hour: f.hour,
     dialogues: [],
     sounds: [],
+    titleCard: null,
   };
 }
 
@@ -103,11 +105,19 @@ function validateShotSpec(ev: CameraShotSpec, ctx: CompileContext): string[] {
   }
   if (ev.fov !== undefined && (!isNum(ev.fov) || ev.fov <= 1 || ev.fov >= 170)) errs.push(`'fov' deve estar entre 1 e 170`);
   if (ev.offset !== undefined && !isVec3(ev.offset)) errs.push(`'offset' deve ser [x, y, z]`);
+  if (ev.drift !== undefined) {
+    if (!isObj(ev.drift)) errs.push(`'drift' deve ser um objeto`);
+    else {
+      if (ev.drift.push !== undefined && !isNum(ev.drift.push)) errs.push(`'drift.push' deve ser um número`);
+      if (ev.drift.pan !== undefined && !isNum(ev.drift.pan)) errs.push(`'drift.pan' deve ser um número`);
+      if (ev.drift.duration !== undefined && (!isNum(ev.drift.duration) || ev.drift.duration < 0)) errs.push(`'drift.duration' deve ser >= 0`);
+    }
+  }
   return errs;
 }
 
 function shotSpecOf(ev: CameraShotSpec): CameraShotSpec {
-  const { shot, preset, subject, over, side, fov, offset, handheld } = ev;
+  const { shot, preset, subject, over, side, fov, offset, handheld, drift } = ev;
   const spec: CameraShotSpec = {};
   if (shot !== undefined) spec.shot = shot;
   if (preset !== undefined) spec.preset = preset;
@@ -117,6 +127,7 @@ function shotSpecOf(ev: CameraShotSpec): CameraShotSpec {
   if (fov !== undefined) spec.fov = fov;
   if (offset !== undefined) spec.offset = offset;
   if (handheld !== undefined) spec.handheld = handheld;
+  if (drift !== undefined) spec.drift = drift;
   return spec;
 }
 
@@ -361,7 +372,7 @@ export function createDefaultHandlers(): HandlerMap {
             f.camera = v;
           },
           interpolate: Interp.step<CameraValue>(),
-          resolve: () => ({ kind: 'shot', spec: shotSpecOf(ev) }),
+          resolve: () => ({ kind: 'shot', spec: shotSpecOf(ev), start: ev.time }),
           duration: 0,
         }),
       ],
@@ -379,7 +390,7 @@ export function createDefaultHandlers(): HandlerMap {
             f.camera = v;
           },
           interpolate: Interp.camera,
-          resolve: () => ({ kind: 'shot', spec: shotSpecOf(ev) }),
+          resolve: () => ({ kind: 'shot', spec: shotSpecOf(ev), start: ev.time }),
         }),
       ],
     },
@@ -825,6 +836,7 @@ export function createDefaultHandlers(): HandlerMap {
         else if (ev.src.startsWith('procedural:') && !(PROCEDURAL_SOUNDS as readonly string[]).includes(ev.src)) {
           errs.push(`'src' procedural inválido (use ${PROCEDURAL_SOUNDS.join(', ')})`);
         }
+        if (ev.bus !== undefined && !SOUND_BUSES.includes(ev.bus)) errs.push(`'bus' deve ser ${SOUND_BUSES.join(' ou ')}`);
         return errs;
       },
       interval(ev, ctx) {
@@ -832,10 +844,31 @@ export function createDefaultHandlers(): HandlerMap {
         const loop = ev.loop ?? false;
         const duration = isNum(ev.duration) && ev.duration > 0 ? ev.duration : loop ? Infinity : known ?? 3;
         const key = `snd:${ctx.index}`;
+        const bus = ev.bus ?? 'sfx';
         return {
           duration,
           apply(f, local) {
-            f.sounds.push({ key, src: ev.src, volume: ev.volume ?? 1, loop, start: ev.time, duration, localTime: local });
+            f.sounds.push({ key, src: ev.src, volume: ev.volume ?? 1, loop, start: ev.time, duration, localTime: local, bus });
+          },
+        };
+      },
+    },
+
+    SHOW_TITLE: {
+      validate(ev) {
+        const errs: string[] = [];
+        if (typeof ev.title !== 'string' || !ev.title) errs.push(`'title' é obrigatório`);
+        if (ev.subtitle !== undefined && typeof ev.subtitle !== 'string') errs.push(`'subtitle' deve ser uma string`);
+        if (ev.duration !== undefined && (!isNum(ev.duration) || ev.duration <= 0)) errs.push(`'duration' deve ser > 0`);
+        if (ev.overlay !== undefined && typeof ev.overlay !== 'boolean') errs.push(`'overlay' deve ser true ou false`);
+        return errs;
+      },
+      interval(ev) {
+        const duration = isNum(ev.duration) && ev.duration > 0 ? ev.duration : 3;
+        return {
+          duration,
+          apply(f, _local, progress) {
+            f.titleCard = { title: ev.title, subtitle: ev.subtitle ?? '', progress, overlay: ev.overlay ?? false };
           },
         };
       },

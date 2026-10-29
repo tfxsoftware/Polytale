@@ -480,6 +480,10 @@ interface PlayingSpeech {
 
 type Playing = PlayingBuffer | PlayingSpeech;
 
+/** Nível base da trilha 'music' e quanto ela abaixa enquanto alguém fala (-8 dB). */
+const MUSIC_BASE_GAIN = 0.7;
+const MUSIC_DUCK_GAIN = MUSIC_BASE_GAIN * 10 ** (-8 / 20);
+
 /**
  * Áudio + lipsync.
  *
@@ -496,6 +500,8 @@ export class AudioLipsync {
   readonly output: AudioNode;
   private readonly master: GainNode;
   private readonly sfxBus: GainNode;
+  private readonly musicBus: GainNode;
+  private duckedIn = false;
   private readonly channels = new Map<string, ActorChannel>();
   private readonly buffers = new Map<string, AudioBuffer>();
   private readonly plans = new Map<string, VoicePlan>();
@@ -522,6 +528,9 @@ export class AudioLipsync {
     this.sfxBus = this.context.createGain();
     this.sfxBus.gain.value = 0.6;
     this.sfxBus.connect(this.master);
+    this.musicBus = this.context.createGain();
+    this.musicBus.gain.value = MUSIC_BASE_GAIN;
+    this.musicBus.connect(this.master);
     this.speechAvailable = typeof window !== 'undefined' && 'speechSynthesis' in window;
   }
 
@@ -640,6 +649,13 @@ export class AudioLipsync {
   update(dt: number, frame: FrameState, playing: boolean): void {
     const speakingActors = new Map<string, ActiveDialogue>();
     for (const d of frame.dialogues) if (d.localTime < d.speakDuration) speakingActors.set(d.actorId, d);
+
+    // A trilha 'music' abaixa (-8 dB) enquanto alguém fala, e volta quando ninguém fala.
+    const shouldDuck = playing && speakingActors.size > 0;
+    if (shouldDuck !== this.duckedIn) {
+      this.duckedIn = shouldDuck;
+      this.musicBus.gain.setTargetAtTime(shouldDuck ? MUSIC_DUCK_GAIN : MUSIC_BASE_GAIN, this.context.currentTime, shouldDuck ? 0.15 : 0.4);
+    }
 
     for (const [id, ch] of this.channels) {
       const d = speakingActors.get(id);
@@ -801,7 +817,7 @@ export class AudioLipsync {
       this.stop(s.key);
       return;
     }
-    this.ensureBuffer(s.key, buffer, offset, rate, s.loop, s.volume, this.sfxBus);
+    this.ensureBuffer(s.key, buffer, offset, rate, s.loop, s.volume, s.bus === 'music' ? this.musicBus : this.sfxBus);
   }
 
   /** Garante que a fonte toca na posição esperada; reinicia se houver drift. */

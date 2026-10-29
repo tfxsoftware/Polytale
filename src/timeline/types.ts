@@ -328,6 +328,20 @@ export interface ActorObjectDef {
   hair?: HairStyle;
   outfit?: Outfit;
   accessories?: Accessory[];
+  /**
+   * Visual das legendas deste ator, por cima do bloco `subtitles` do roteiro
+   * (ex.: fonte itálica para um personagem, serifada para outro).
+   */
+  subtitle?: ActorSubtitleStyle;
+}
+
+export interface ActorSubtitleStyle {
+  /** Família de fonte CSS do texto falado por este ator. */
+  font?: string;
+  /** Cor do texto falado por este ator (o nome continua usando `color`). */
+  color?: string;
+  /** Multiplicador do tamanho do texto deste ator (substitui `subtitles.size`). */
+  size?: number;
 }
 
 export interface PropObjectDef extends PropDef {
@@ -377,6 +391,19 @@ export interface CameraShotSpec {
   /** Deslocamento extra da posição da câmera, em metros (espaço do mundo). */
   offset?: Vec3;
   handheld?: number;
+  /**
+   * Deriva lenta e contínua enquanto o plano estiver ativo (dolly-in / pan),
+   * em vez de uma câmera estática. Aplicada por segundo desde o início do plano.
+   */
+  drift?: CameraDriftSpec;
+}
+
+/** `push`: metros/s na direção do alvo (positivo aproxima). `pan`: graus/s em torno do alvo (eixo Y). */
+export interface CameraDriftSpec {
+  push?: number;
+  pan?: number;
+  /** Depois desse tempo (s) a deriva para no valor atingido. Padrão: sem limite. */
+  duration?: number;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -399,9 +426,14 @@ export interface RetroSettings {
   vertexSnap: number;
 }
 
+export const COLOR_GRADES = ['none', 'warm', 'cool', 'noir'] as const;
+export type ColorGrade = (typeof COLOR_GRADES)[number];
+
 export interface FxDef {
   retro?: boolean;
   settings?: Partial<RetroSettings>;
+  /** Correção de cor independente do retro FX (também funciona com ele desligado). Padrão 'none'. */
+  grade?: ColorGrade;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -608,12 +640,27 @@ export interface FlashScreenEvent extends EventBase {
   intensity?: number;
 }
 
+export const SOUND_BUSES = ['sfx', 'music'] as const;
+export type SoundBus = (typeof SOUND_BUSES)[number];
+
 export interface PlaySoundEvent extends EventBase {
   type: 'PLAY_SOUND';
   /** URL ou um dos PROCEDURAL_SOUNDS. */
   src: string;
   volume?: number;
   loop?: boolean;
+  /** 'sfx' (padrão) ou 'music' — a trilha 'music' abaixa automaticamente enquanto alguém fala. */
+  bus?: SoundBus;
+}
+
+export interface ShowTitleEvent extends EventBase {
+  type: 'SHOW_TITLE';
+  title: string;
+  subtitle?: string;
+  /** Segundos em tela (padrão 3). */
+  duration?: number;
+  /** true = só o texto (com sombra), sem a faixa escura — para sobrepor a uma cena em andamento. Padrão false. */
+  overlay?: boolean;
 }
 
 export type StoryEvent =
@@ -638,13 +685,31 @@ export type StoryEvent =
   | SetTimeOfDayEvent
   | FadeScreenEvent
   | FlashScreenEvent
-  | PlaySoundEvent;
+  | PlaySoundEvent
+  | ShowTitleEvent;
 
 export type EventType = StoryEvent['type'];
 export type EventOf<K extends EventType> = Extract<StoryEvent, { type: K }>;
 
 export const ASPECT_RATIOS = ['16:9', '9:16', '1:1'] as const;
 export type AspectRatio = (typeof ASPECT_RATIOS)[number];
+
+export const WATERMARK_POSITIONS = ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'center'] as const;
+export type WatermarkPosition = (typeof WATERMARK_POSITIONS)[number];
+
+/** Marca d'água fixa sobre a cena (tela e vídeo exportado). `text` e/ou `image` — pelo menos um. */
+export interface WatermarkDef {
+  text?: string;
+  /** URL/data URI de uma imagem (logo), desenhada ao lado do texto. */
+  image?: string;
+  /** Padrão 'bottom-right'. */
+  position?: WatermarkPosition;
+  /** 0..1. Padrão 0.8. */
+  opacity?: number;
+  /** Tamanho do texto em px (720p); escala com o quadro como as legendas. Padrão 22. */
+  size?: number;
+  color?: string;
+}
 
 export interface StoryMeta {
   title: string;
@@ -658,6 +723,7 @@ export interface StoryMeta {
    * formato. Sem `aspect`, a cena ocupa a janela inteira.
    */
   aspect?: AspectRatio;
+  watermark?: WatermarkDef;
 }
 
 /** Capítulo: uma cena completa (cenário próprio) dentro de uma história maior. */
@@ -677,14 +743,15 @@ export interface ChapterDef {
   showTitle?: boolean;
 }
 
-export const SUBTITLE_STYLES = ['box', 'plain'] as const;
+export const SUBTITLE_STYLES = ['box', 'plain', 'outline'] as const;
 export const SUBTITLE_POSITIONS = ['bottom', 'top', 'center', 'speaker'] as const;
+export const SUBTITLE_MODES = ['typewriter', 'words', 'chunk'] as const;
 
 /** Visual das legendas (tela e vídeo exportado). */
 export interface SubtitleDef {
   /** false = sem legendas. Padrão true. */
   enabled?: boolean;
-  /** 'box' = caixa estilo RPG (padrão); 'plain' = texto de cinema com contorno. */
+  /** 'box' = caixa estilo RPG (padrão); 'plain' = texto de cinema com contorno; 'outline' = contorno + sombra projetada. */
   style?: (typeof SUBTITLE_STYLES)[number];
   /** 'bottom' (padrão), 'top', 'center' ou 'speaker' (balão sobre a cabeça de quem fala). */
   position?: (typeof SUBTITLE_POSITIONS)[number];
@@ -692,8 +759,17 @@ export interface SubtitleDef {
   margin?: number;
   /** Mostra o nome de quem fala. Padrão true. */
   showName?: boolean;
-  /** Revela o texto letra a letra. Padrão true. */
+  /** Revela o texto letra a letra. Padrão true. Ignorado quando `mode` não é 'typewriter'. */
   typewriter?: boolean;
+  /**
+   * Como o texto da fala aparece: 'typewriter' (a linha inteira, letra a letra — padrão);
+   * 'words' (grupos de até `maxWords` palavras que crescem palavra a palavra e são
+   * substituídos pelo próximo grupo, estilo TikTok/Reels); 'chunk' (como 'words', mas cada
+   * grupo aparece de uma vez, sem revelação progressiva).
+   */
+  mode?: (typeof SUBTITLE_MODES)[number];
+  /** Palavras por grupo nos modos 'words' (1–4 típico) e 'chunk' (6–8 típico). Padrão 3. */
+  maxWords?: number;
   /** Multiplicador do tamanho do texto (1 = padrão). */
   size?: number;
   color?: string;
@@ -795,7 +871,7 @@ export interface LightFrame {
 
 /** Valor da câmera: um plano, ou mistura (possivelmente aninhada) entre planos. */
 export type CameraValue =
-  | { kind: 'shot'; spec: CameraShotSpec }
+  | { kind: 'shot'; spec: CameraShotSpec; /** Instante (s) em que o plano começou, para a deriva (`drift`). */ start: number }
   | { kind: 'blend'; from: CameraValue; to: CameraValue; alpha: number };
 
 export interface ShakeState {
@@ -830,15 +906,26 @@ export interface ActiveSound {
   start: number;
   duration: number;
   localTime: number;
+  bus: SoundBus;
 }
 
 export interface FxFrame {
   retro: boolean;
   settings: RetroSettings;
+  grade: ColorGrade;
   fade: number;
   fadeColor: RGB;
   flash: number;
   flashColor: RGB;
+}
+
+/** Cartela de título ativa (chapter automático ou SHOW_TITLE explícito). */
+export interface TitleCardFrame {
+  title: string;
+  subtitle: string;
+  /** 0..1 ao longo da exibição. */
+  progress: number;
+  overlay: boolean;
 }
 
 export interface FrameState {
@@ -853,6 +940,8 @@ export interface FrameState {
   hour: number | null;
   dialogues: ActiveDialogue[];
   sounds: ActiveSound[];
+  /** Cartela de título de um evento SHOW_TITLE explícito (null = nenhuma ativa). */
+  titleCard: TitleCardFrame | null;
 }
 
 export const DEFAULT_RETRO_SETTINGS: RetroSettings = {

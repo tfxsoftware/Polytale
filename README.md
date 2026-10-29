@@ -29,13 +29,17 @@ voices and sounds can all be procedural.
 - **Lip-synced dialogue**: a 512-bin `AnalyserNode` (RMS energy drives `jawOpen`), a procedural
   90s-game "babble" voice, a `speechSynthesis` fallback, and RPG-style subtitles.
 - **Camera direction**: presets (`wide`, `medium`, `close_up`, `over_shoulder`, `two_shot`,
-  `low_angle`) that track actors and avoid occlusion, lerp/slerp transitions, and camera shake
-  with exponential decay.
+  `low_angle`) that track actors and avoid occlusion, lerp/slerp transitions, continuous
+  dolly-in/pan `drift`, and camera shake with exponential decay.
 - **PS1 visuals**: a GLSL shader with downscaling, 4x4 Bayer dithering, 15-bit color, scanlines and
-  CRT curvature, plus *vertex snapping* (the PlayStation vertex wobble).
+  CRT curvature, plus *vertex snapping* (the PlayStation vertex wobble) and a color grade (`fx.grade`:
+  warm, cool, noir) independent of the retro look.
+- **Audio mixing**: a `music` sound bus that automatically ducks under dialogue, and an approximate
+  integrated-loudness (LUFS) reading reported after each export.
 - **Built-in editors**: a JSON editor (open/save files, copy a shareable link) and a visual
   track editor with draggable events and a per-event inspector.
-- **Video export**: one click records the whole story to `.webm` with audio, subtitles and title cards.
+- **Video export**: one click records the whole story to `.mp4` (falling back to `.webm` if the browser
+  can't encode MP4) with audio, subtitles, title cards and an optional watermark.
 - **AI script generation**: paste a story and Claude turns it into a validated StoryScript.
 - **LLM-ready**: [`skills.md`](./skills.md) teaches an AI to turn free-form scripts into valid
   StoryScript (written in Portuguese).
@@ -137,16 +141,25 @@ your file) to a script to get autocomplete and inline errors in VS Code and othe
 | Group | Actions |
 |---|---|
 | Objects | `SPAWN_OBJECT`, `DESPAWN_OBJECT`, `TRANSFORM_OBJECT` |
-| Dialogue & sound | `PLAY_AUDIO_WITH_LIPSYNC`, `PLAY_SOUND` |
+| Dialogue & sound | `PLAY_AUDIO_WITH_LIPSYNC`, `PLAY_SOUND` (`bus: "sfx" \| "music"`) |
 | Camera | `CAMERA_CUT`, `CAMERA_TRANSITION`, `CAMERA_SHAKE` |
 | Acting | `SET_LOOK_TARGET`, `SET_EXPRESSION`, `PLAY_GESTURE`, `PLAY_ANIMATION` |
 | Body | `SET_POSE`, `REACH`, `ATTACH_OBJECT`, `DETACH_OBJECT`, `INTERACT` |
-| Light & effects | `SET_LIGHT`, `SET_TIME_OF_DAY`, `SET_RETRO_FX`, `FADE_SCREEN`, `FLASH_SCREEN` |
+| Light & effects | `SET_LIGHT`, `SET_TIME_OF_DAY`, `SET_RETRO_FX`, `FADE_SCREEN`, `FLASH_SCREEN`, `SHOW_TITLE` |
 
-Subtitles are styled in the **⚙ OPÇÕES** panel (`O`), which writes an optional top-level `subtitles` block (`style: "box" | "plain"`,
-`position: "bottom" | "top" | "center" | "speaker"` (speech bubble that follows the speaker's head), `margin`, `showName`, `typewriter`, `size`, `color`, `background`, `border`, `font`, or
-`enabled: false` to turn them off); a single line can opt out with `"subtitle": false`. The same
-style is used on screen and in exported videos.
+Subtitles are styled in the **⚙ OPÇÕES** panel (`O`), which writes an optional top-level `subtitles` block (`style: "box" | "plain" | "outline"`,
+`position: "bottom" | "top" | "center" | "speaker"` (speech bubble that follows the speaker's head), `margin`, `showName`,
+`mode: "typewriter" | "words" | "chunk"` (letter-by-letter, TikTok-style word groups, or whole phrase chunks — with `maxWords`
+per group), `typewriter`, `size`, `color`, `background`, `border`, `font`, or `enabled: false` to turn them off); a single line
+can opt out with `"subtitle": false`. The same style is used on screen and in exported videos. A `subtitle: { font, color, size }`
+block on an actor in `cast` overrides the global style for that character's lines only (the name tag keeps using `color`).
+
+A `meta.watermark` block (`text` and/or `image`, `position`, `opacity`, `size`, `color`) draws a fixed mark over the scene,
+also on screen and in exported videos.
+
+`SHOW_TITLE` (`title`, `subtitle?`, `duration?`, `overlay?`) shows a title card at any point in the timeline, not just at a
+chapter's start — the scene keeps playing underneath. `overlay: true` drops the dark band for text-with-shadow over the
+running scene (good for an outro/credits card); the default banded look matches the automatic chapter-start cards.
 
 The full reference (fields, accepted values, directing rules, and a dialogue timing guide of
 roughly 1 s per 12–15 characters) is in **[`skills.md`](./skills.md)**.
@@ -173,13 +186,21 @@ and use the JSON it returns.
 ### Downloading a video
 
 Press `V` (or **⬇ VÍDEO**): the story plays once from start to end in real time (at 1x, without looping)
-while a progress card shows how far along it is, then a `.webm` (VP9/VP8 + Opus) with subtitles and
-chapter title cards burned in downloads automatically. `Esc` or **CANCELAR** stops without saving.
+while a progress card shows how far along it is, then a `.mp4` (H.264 + AAC, the format Instagram,
+TikTok and WhatsApp accept directly — falling back to `.webm`/VP9+Opus if the browser can't encode MP4)
+with subtitles, chapter title cards and an optional watermark burned in downloads automatically.
+`Esc` or **CANCELAR** stops without saving.
 Keep the tab visible while it runs: browsers pause hidden tabs.
 
 Audio files, procedural sounds and `babble` voices are recorded as-is. `speech` voices
 (`window.speechSynthesis`) are played by the operating system and can't be captured, so while the video
 is generated they are swapped for a `babble` voice stretched to the same line length.
+
+A `PLAY_SOUND` with `bus: "music"` ducks automatically (-8 dB) while any dialogue is speaking, and
+comes back up once it's quiet — no manual mixing needed for a constant music/ambience bed. The status
+message after a download includes an approximate integrated loudness reading (e.g. `≈-15.2 LUFS`,
+measured with a simplified BS.1770 K-weighting filter, ungated) against the -14 LUFS reference most
+platforms normalize to — a rough guide for whether the mix is loud enough, not a certified measurement.
 
 ---
 

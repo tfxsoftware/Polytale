@@ -72,7 +72,10 @@ export class SettingsPanel {
     margin: HTMLInputElement;
     marginOut: HTMLOutputElement;
     showName: HTMLInputElement;
+    mode: HTMLSelectElement;
     typewriter: HTMLInputElement;
+    maxWords: HTMLInputElement;
+    maxWordsOut: HTMLOutputElement;
     size: HTMLInputElement;
     sizeOut: HTMLOutputElement;
     font: HTMLSelectElement;
@@ -84,6 +87,8 @@ export class SettingsPanel {
   };
   private readonly boxOnly: HTMLElement[] = [];
   private readonly dependent: HTMLElement[] = [];
+  private readonly typewriterOnly: HTMLElement[] = [];
+  private readonly groupedOnly: HTMLElement[] = [];
   private marginRow!: HTMLLabelElement;
   private readonly marginLabel: HTMLSpanElement;
 
@@ -143,6 +148,7 @@ export class SettingsPanel {
       style: select([
         ['box', 'Caixa (RPG)'],
         ['plain', 'Texto (cinema)'],
+        ['outline', 'Contorno + sombra'],
       ]),
       position: select([
         ['bottom', 'Embaixo'],
@@ -153,7 +159,14 @@ export class SettingsPanel {
       margin: range(0, 200, 4),
       marginOut: document.createElement('output'),
       showName: check(),
+      mode: select([
+        ['typewriter', 'Letra a letra'],
+        ['words', 'Grupos de palavras (TikTok)'],
+        ['chunk', 'Blocos de frase'],
+      ]),
       typewriter: check(),
+      maxWords: range(1, 8, 1),
+      maxWordsOut: document.createElement('output'),
       size: range(0.6, 2, 0.1),
       sizeOut: document.createElement('output'),
       font: select(FONTS),
@@ -171,7 +184,9 @@ export class SettingsPanel {
       this.row('Posição', c.position, 'dep'),
       (this.marginRow = this.row('Distância da borda', c.margin, 'dep', c.marginOut)),
       this.row('Nome de quem fala', c.showName, 'dep'),
-      this.row('Máquina de escrever', c.typewriter, 'dep'),
+      this.row('Revelação do texto', c.mode, 'dep'),
+      this.row('Máquina de escrever', c.typewriter, 'typewriter'),
+      this.row('Palavras por grupo', c.maxWords, 'words', c.maxWordsOut),
       this.row('Tamanho', c.size, 'dep', c.sizeOut),
       this.row('Fonte', c.font, 'dep'),
       this.row('Cor do texto', c.color, 'dep'),
@@ -210,7 +225,9 @@ export class SettingsPanel {
     c.position.addEventListener('change', () => set('position', c.position.value as SubtitleDef['position']));
     c.margin.addEventListener('input', () => set('margin', Number(c.margin.value)));
     c.showName.addEventListener('change', () => set('showName', c.showName.checked));
+    c.mode.addEventListener('change', () => set('mode', c.mode.value as SubtitleDef['mode']));
     c.typewriter.addEventListener('change', () => set('typewriter', c.typewriter.checked));
+    c.maxWords.addEventListener('input', () => set('maxWords', Number(c.maxWords.value)));
     c.size.addEventListener('input', () => set('size', Number(c.size.value)));
     c.font.addEventListener('change', () => set('font', c.font.value));
     c.color.addEventListener('input', () => set('color', c.color.value));
@@ -273,7 +290,10 @@ export class SettingsPanel {
     // No centro não há borda de referência; no balão a distância é acima da cabeça.
     this.marginLabel.textContent = s.position === 'speaker' ? 'Altura do balão' : 'Distância da borda';
     c.showName.checked = s.showName;
+    c.mode.value = s.mode;
     c.typewriter.checked = s.typewriter;
+    c.maxWords.value = String(s.maxWords);
+    c.maxWordsOut.textContent = String(s.maxWords);
     c.size.value = String(s.size);
     c.sizeOut.textContent = `${s.size.toFixed(1)}x`;
     if (!FONTS.some(([v]) => v === s.font)) c.font.append(new Option(s.font, s.font));
@@ -287,6 +307,8 @@ export class SettingsPanel {
 
     for (const el of this.dependent) el.classList.toggle('is-disabled', !s.enabled);
     for (const el of this.boxOnly) el.classList.toggle('is-disabled', !s.enabled || s.style !== 'box');
+    for (const el of this.typewriterOnly) el.classList.toggle('is-disabled', !s.enabled || s.mode !== 'typewriter');
+    for (const el of this.groupedOnly) el.classList.toggle('is-disabled', !s.enabled || s.mode === 'typewriter');
     this.marginRow.classList.toggle('is-disabled', !s.enabled || s.position === 'center');
     this.drawPreview();
   }
@@ -316,7 +338,7 @@ export class SettingsPanel {
     drawSubtitles(ctx, { width: w, height: h, scale: 0.55, inset: 10, time: 0, anchor }, [PREVIEW_LINE], style, () => ({ name: 'Personagem', color: '#ffd166' }));
   }
 
-  private row(label: string, control: HTMLElement, group?: 'dep' | 'box', output?: HTMLOutputElement): HTMLLabelElement {
+  private row(label: string, control: HTMLElement, group?: 'dep' | 'box' | 'typewriter' | 'words', output?: HTMLOutputElement): HTMLLabelElement {
     const row = document.createElement('label');
     row.className = 'settings-row';
     const text = document.createElement('span');
@@ -325,6 +347,14 @@ export class SettingsPanel {
     if (output) row.append(output);
     if (group === 'dep') this.dependent.push(row);
     if (group === 'box') this.boxOnly.push(row);
+    if (group === 'typewriter') {
+      this.dependent.push(row);
+      this.typewriterOnly.push(row);
+    }
+    if (group === 'words') {
+      this.dependent.push(row);
+      this.groupedOnly.push(row);
+    }
     return row;
   }
 

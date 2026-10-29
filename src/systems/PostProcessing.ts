@@ -3,8 +3,28 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
-import type { FxFrame, RetroSettings } from '../timeline/types';
+import type { ColorGrade, FxFrame, RetroSettings } from '../timeline/types';
 import { DEFAULT_RETRO_SETTINGS } from '../timeline/types';
+
+/* ========================================================================== */
+/*  Correção de cor (fx.grade)                                               */
+/* ========================================================================== */
+
+interface GradeSpec {
+  tint: [number, number, number];
+  lift: [number, number, number];
+  saturation: number;
+}
+
+/** Pequenos presets de tint/lift/saturação, independentes do retro FX. */
+const GRADE_PRESETS: Record<ColorGrade, GradeSpec> = {
+  none: { tint: [1, 1, 1], lift: [0, 0, 0], saturation: 1 },
+  // Pôr do sol: quente, sombras levemente levantadas, leve ganho de saturação.
+  warm: { tint: [1.08, 1.0, 0.9], lift: [0.02, 0.012, 0], saturation: 1.08 },
+  cool: { tint: [0.95, 1.0, 1.08], lift: [0, 0.006, 0.016], saturation: 1.0 },
+  // Quase dessaturado, com uma leve tonalidade fria (clássico noir).
+  noir: { tint: [0.97, 0.97, 1.0], lift: [0, 0, 0.01], saturation: 0.05 },
+};
 
 /* ========================================================================== */
 /*  Vertex snapping (jitter de vértices do PS1)                               */
@@ -68,6 +88,9 @@ const RetroShader = {
     uVignette: { value: DEFAULT_RETRO_SETTINGS.vignette },
     uChromatic: { value: DEFAULT_RETRO_SETTINGS.chromatic },
     uNoise: { value: DEFAULT_RETRO_SETTINGS.noise },
+    uGradeTint: { value: new THREE.Vector3(1, 1, 1) },
+    uGradeLift: { value: new THREE.Vector3(0, 0, 0) },
+    uGradeSat: { value: 1 },
     uFade: { value: 0 },
     uFadeColor: { value: new THREE.Color(0, 0, 0) },
     uFlash: { value: 0 },
@@ -95,12 +118,22 @@ const RetroShader = {
     uniform float uVignette;
     uniform float uChromatic;
     uniform float uNoise;
+    uniform vec3 uGradeTint;
+    uniform vec3 uGradeLift;
+    uniform float uGradeSat;
     uniform float uFade;
     uniform vec3 uFadeColor;
     uniform float uFlash;
     uniform vec3 uFlashColor;
 
     varying vec2 vUv;
+
+    // Correção de cor independente do retro FX: satura/dessatura, aplica tingimento e levanta as sombras.
+    vec3 grade(vec3 c) {
+      float luma = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      c = mix(vec3(luma), c, uGradeSat);
+      return c * uGradeTint + uGradeLift;
+    }
 
     // Matriz de Bayer 4x4 (valores normalizados em [0, 1)).
     float bayer4x4(vec2 p) {
@@ -132,6 +165,7 @@ const RetroShader = {
 
       if (uEnabled < 0.5) {
         vec3 col = texture2D(tDiffuse, uv).rgb;
+        col = grade(col);
         col = mix(col, uFadeColor, uFade);
         col += uFlashColor * uFlash;
         gl_FragColor = vec4(col, 1.0);
@@ -155,6 +189,7 @@ const RetroShader = {
       float g = texture2D(tDiffuse, suv).g;
       float b = texture2D(tDiffuse, suv - dir * uChromatic * 8.0).b;
       vec3 col = vec3(r, g, b);
+      col = grade(col);
 
       // Fade/flash antes da quantização => transições também ficam "dithered".
       col = mix(col, uFadeColor, uFade);
@@ -246,12 +281,16 @@ export class PostProcessing {
     this.updateUniforms();
   }
 
-  /** Aplica o estado de efeitos da timeline (retro, parâmetros, fade, flash). */
+  /** Aplica o estado de efeitos da timeline (retro, parâmetros, grade, fade, flash). */
   applyFrame(fx: FxFrame, elapsed: number): void {
     this.timelineEnabled = fx.retro;
     this.settings = fx.settings;
     const u = this.retroPass.uniforms;
     u.uTime.value = elapsed;
+    const grade = GRADE_PRESETS[fx.grade] ?? GRADE_PRESETS.none;
+    (u.uGradeTint.value as THREE.Vector3).set(...grade.tint);
+    (u.uGradeLift.value as THREE.Vector3).set(...grade.lift);
+    u.uGradeSat.value = grade.saturation;
     u.uFade.value = fx.fade;
     (u.uFadeColor.value as THREE.Color).setRGB(fx.fadeColor[0], fx.fadeColor[1], fx.fadeColor[2]);
     u.uFlash.value = fx.flash;

@@ -5,6 +5,8 @@ export interface TitleCardState {
   subtitle: string;
   /** 0..1 ao longo da exibição. */
   progress: number;
+  /** true = só o texto (com sombra), sem a faixa escura — para sobrepor a uma cena em andamento. */
+  overlay?: boolean;
 }
 
 /** Opacidade da cartela: entra e sai suavemente (derivada do tempo — seek-safe). */
@@ -41,5 +43,6 @@ export class TitleCard {
       this.main.textContent = state?.title ?? '';
     }
     this.root.style.opacity = opacity.toFixed(3);
+    this.root.classList.toggle('is-overlay', !!state?.overlay);
   }
 }
