@@ -36,7 +36,17 @@ export type Gesture = (typeof GESTURES)[number];
 export const CAMERA_PRESETS = ['wide', 'medium', 'close_up', 'over_shoulder', 'two_shot', 'low_angle'] as const;
 export type CameraPreset = (typeof CAMERA_PRESETS)[number];
 
-export const PROCEDURAL_SOUNDS = ['procedural:wind', 'procedural:thunder', 'procedural:fire', 'procedural:chime'] as const;
+export const PROCEDURAL_SOUNDS = [
+  'procedural:wind',
+  'procedural:thunder',
+  'procedural:fire',
+  'procedural:chime',
+  'procedural:drip',
+  'procedural:hum',
+  'procedural:water',
+  'procedural:switch',
+  'procedural:door',
+] as const;
 
 /* -------------------------------------------------------------------------- */
 /*  Corpo: articulações, poses, alcance (IK) e encaixes                        */

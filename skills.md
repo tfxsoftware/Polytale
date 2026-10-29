@@ -335,8 +335,10 @@ Campos comuns a **todos** os eventos:
 - `SET_RETRO_FX.settings`: `pixelSize` (1–8), `colorLevels` (32 = 15-bit PS1; 8–16 = mais "sujo"),
   `dither` (0–1), `scanlines` (0–1), `curvature` (0–0.3), `vignette` (0–1), `chromatic` (0–0.005),
   `noise` (0–0.1), `vertexSnap` (0–1).
-- `PLAY_SOUND.src`: URL em `public/audio/` ou `procedural:wind`, `procedural:fire`,
-  `procedural:thunder`, `procedural:chime`.
+- `PLAY_SOUND.src`: URL em `public/audio/` ou um som procedural: `procedural:wind`, `procedural:fire`,
+  `procedural:thunder`, `procedural:chime`, `procedural:drip` (gota pingando, use com `loop`),
+  `procedural:hum` (zumbido de lâmpada, `loop`), `procedural:water` (torneira), `procedural:switch`
+  (interruptor), `procedural:door` (porta fechando).
 
 ---
 

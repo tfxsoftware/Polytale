@@ -350,6 +350,73 @@ function renderProceduralSound(name: string, sampleRate: number): { data: Float3
       }
       return { data: normalize(out, 0.95), loop: false };
     }
+    case 'procedural:drip': {
+      // Gota d'água: "plink" com glissando descendente + respingo, uma vez por ciclo (loop).
+      const out = sec(2.2);
+      const start = Math.floor(0.25 * sampleRate);
+      let phase = 0;
+      for (let i = start; i < out.length; i++) {
+        const t = (i - start) / sampleRate;
+        if (t > 0.35) break;
+        const f = 600 + 1500 * Math.exp(-t * 60);
+        phase += (2 * Math.PI * f) / sampleRate;
+        out[i] = Math.sin(phase) * Math.exp(-t * 22) * 0.9 + (rand() * 2 - 1) * Math.exp(-t * 90) * 0.25;
+      }
+      return { data: out, loop: true };
+    }
+    case 'procedural:hum': {
+      // Zumbido de reator de lâmpada fluorescente: 100 Hz + harmônicos (ciclos inteiros => loop sem clique).
+      const out = sec(2);
+      for (let i = 0; i < out.length; i++) {
+        const t = i / sampleRate;
+        const w = 2 * Math.PI * 100 * t;
+        const buzz = Math.sin(w) + 0.5 * Math.sin(2 * w) + 0.35 * Math.sign(Math.sin(3 * w)) * 0.4 + 0.2 * Math.sin(6 * w);
+        out[i] = buzz * (0.9 + 0.1 * Math.sin(2 * Math.PI * 0.5 * t)) + (rand() * 2 - 1) * 0.04;
+      }
+      return { data: normalize(out, 0.5), loop: true };
+    }
+    case 'procedural:water': {
+      // Torneira aberta: ruído filtrado com bolhas, ataque rápido e cauda.
+      const out = sec(2.6);
+      let lp = 0;
+      let hp = 0;
+      let prev = 0;
+      for (let i = 0; i < out.length; i++) {
+        const t = i / sampleRate;
+        const white = rand() * 2 - 1;
+        lp += (white - lp) * 0.25;
+        hp = 0.92 * (hp + lp - prev);
+        prev = lp;
+        const env = Math.min(1, t / 0.08) * (t > 1.9 ? Math.exp(-(t - 1.9) * 6) : 1);
+        const bubble = 0.75 + 0.25 * Math.sin(2 * Math.PI * (7 + 3 * Math.sin(t * 5)) * t);
+        out[i] = hp * env * bubble;
+      }
+      return { data: normalize(out, 0.8), loop: false };
+    }
+    case 'procedural:switch': {
+      // Interruptor: estalo seco.
+      const out = sec(0.2);
+      for (let i = 0; i < out.length; i++) {
+        const t = i / sampleRate;
+        out[i] = (rand() * 2 - 1) * Math.exp(-t * 400) + Math.sin(2 * Math.PI * 2200 * t) * Math.exp(-t * 120) * 0.6;
+      }
+      return { data: normalize(out, 0.9), loop: false };
+    }
+    case 'procedural:door': {
+      // Porta se fechando: batida grave + trinco.
+      const out = sec(1.4);
+      let lp = 0;
+      for (let i = 0; i < out.length; i++) {
+        const t = i / sampleRate;
+        lp += ((rand() * 2 - 1) - lp) * 0.08;
+        const thud = Math.sin(2 * Math.PI * (55 + 30 * Math.exp(-t * 20)) * t) * Math.exp(-t * 7);
+        const knock = lp * Math.exp(-t * 25) * 2;
+        const lt = t - 0.09;
+        const latch = lt > 0 ? (rand() * 2 - 1) * Math.exp(-lt * 300) * 0.5 + Math.sin(2 * Math.PI * 3100 * lt) * Math.exp(-lt * 80) * 0.25 : 0;
+        out[i] = thud + knock + latch;
+      }
+      return { data: normalize(out, 0.95), loop: false };
+    }
     case 'procedural:chime':
     default: {
       const out = sec(2.5);
