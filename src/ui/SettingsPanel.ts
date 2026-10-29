@@ -1,10 +1,19 @@
-import type { ActiveDialogue, SubtitleDef } from '../timeline/types';
+import type { ActiveDialogue, AspectRatio, SubtitleDef } from '../timeline/types';
 import { SUBTITLE_DEFAULTS, drawSubtitles, resolveSubtitles } from './SubtitleRenderer';
 
 export interface SettingsPanelCallbacks {
   /** Novo bloco `subtitles` do roteiro (undefined = tudo no padrão). */
   onSubtitlesChange(def: SubtitleDef | undefined): void;
+  /** Novo `meta.aspect` (undefined = tela inteira). */
+  onAspectChange(aspect: AspectRatio | undefined): void;
 }
+
+const ASPECTS: [string, string][] = [
+  ['', 'Tela inteira'],
+  ['16:9', '16:9 (paisagem)'],
+  ['9:16', '9:16 (Reels, TikTok)'],
+  ['1:1', '1:1 (quadrado)'],
+];
 
 const FONTS: [string, string][] = [
   ['VT323', 'Pixel (VT323)'],
@@ -48,12 +57,13 @@ function rgba(hex: string, alpha: number): string {
 }
 
 /**
- * Painel "Opções" (botão ⚙ / tecla O): ajusta o visual das legendas com
- * prévia ao vivo. As mudanças vão para o bloco `subtitles` do roteiro.
+ * Painel "Opções" (botão ⚙ / tecla O): formato do vídeo (`meta.aspect`) e
+ * visual das legendas com prévia ao vivo (bloco `subtitles` do roteiro).
  */
 export class SettingsPanel {
   private readonly root: HTMLDivElement;
   private readonly preview: HTMLCanvasElement;
+  private readonly aspect: HTMLSelectElement;
   private def: SubtitleDef = {};
   private readonly controls: {
     enabled: HTMLInputElement;
@@ -90,10 +100,15 @@ export class SettingsPanel {
     const head = document.createElement('div');
     head.className = 'settings-head';
     const title = document.createElement('h2');
-    title.textContent = 'Legendas';
+    title.textContent = 'Opções';
     const close = this.button('✕', 'Fechar (Esc)');
     close.addEventListener('click', () => this.close());
     head.append(title, close);
+    const section = (text: string) => {
+      const h = document.createElement('h3');
+      h.textContent = text;
+      return h;
+    };
 
     this.preview = document.createElement('canvas');
     this.preview.className = 'settings-preview';
@@ -169,13 +184,18 @@ export class SettingsPanel {
 
     const footer = document.createElement('div');
     footer.className = 'settings-footer';
-    const reset = this.button('PADRÃO', 'Voltar ao visual padrão');
+    const reset = this.button('PADRÃO', 'Voltar ao visual padrão das legendas');
     reset.addEventListener('click', () => this.commit({}));
     const done = this.button('OK', 'Fechar');
     done.addEventListener('click', () => this.close());
     footer.append(reset, done);
 
-    this.root.append(head, this.preview, ...rows, footer);
+    this.aspect = select(ASPECTS);
+    const aspectRow = this.row('Formato do vídeo', this.aspect);
+    aspectRow.title = 'Proporção da tela e do vídeo baixado (1080p)';
+    this.aspect.addEventListener('change', () => this.cb.onAspectChange((this.aspect.value || undefined) as AspectRatio | undefined));
+
+    this.root.append(head, section('Vídeo'), aspectRow, section('Legendas'), this.preview, ...rows, footer);
     parent.appendChild(this.root);
 
     const set = <K extends keyof SubtitleDef>(key: K, value: SubtitleDef[K]) => {
@@ -223,6 +243,11 @@ export class SettingsPanel {
   refresh(current: SubtitleDef | undefined): void {
     this.def = { ...current };
     this.sync();
+  }
+
+  /** Reflete o `meta.aspect` do roteiro carregado. */
+  setAspect(aspect: AspectRatio | undefined): void {
+    this.aspect.value = aspect ?? '';
   }
 
   toggle(current: SubtitleDef | undefined): void {

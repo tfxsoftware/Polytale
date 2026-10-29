@@ -1,5 +1,5 @@
 import type { ActiveDialogue } from '../timeline/types';
-import { drawSubtitles, visibleDialogues, type ScreenPoint, type SpeakerInfo, type SubtitleStyle } from '../ui/SubtitleRenderer';
+import { drawSubtitles, subtitleInset, subtitleScale, visibleDialogues, type ScreenPoint, type SpeakerInfo, type SubtitleStyle } from '../ui/SubtitleRenderer';
 import { titleCardOpacity, type TitleCardState } from '../ui/TitleCard';
 
 export interface RecorderOverlay {
@@ -11,10 +11,18 @@ export interface RecorderOverlay {
   anchor?(actorId: string): ScreenPoint | null;
 }
 
-const MIME_CANDIDATES = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+/** MP4 (H.264/AAC) primeiro: é o que Instagram, TikTok e WhatsApp aceitam direto. */
+const MIME_CANDIDATES = [
+  'video/mp4;codecs=avc1.640028,mp4a.40.2',
+  'video/mp4;codecs=avc1,mp4a.40.2',
+  'video/mp4',
+  'video/webm;codecs=vp9,opus',
+  'video/webm;codecs=vp8,opus',
+  'video/webm',
+];
 
 /**
- * Grava a cena em .webm: vídeo do canvas WebGL (com legendas e cartelas
+ * Grava a cena em .mp4 (ou .webm, se o navegador não gravar MP4): vídeo do canvas WebGL (com legendas e cartelas
  * desenhadas por cima) + áudio da mixagem da engine.
  *
  * Limite: a voz do `speechSynthesis` sai direto pelo sistema operacional e
@@ -65,7 +73,9 @@ export class Recorder {
     for (const track of this.audioTap.stream.getAudioTracks()) stream.addTrack(track);
 
     const mimeType = MIME_CANDIDATES.find((m) => MediaRecorder.isTypeSupported(m)) ?? '';
-    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 6_000_000 });
+    // ~8 Mbps em 1080p; nunca abaixo de 4 Mbps (o dithering retrô pesa na compressão).
+    const videoBitsPerSecond = Math.max(4_000_000, Math.round(canvas.width * canvas.height * 4));
+    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond });
     this.chunks = [];
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) this.chunks.push(e.data);
@@ -120,7 +130,7 @@ export class Recorder {
         .replace(/^-|-$/g, '') || 'polytale';
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `${slug}.webm`;
+    a.download = `${slug}.${blob.type.startsWith('video/mp4') ? 'mp4' : 'webm'}`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
@@ -128,7 +138,7 @@ export class Recorder {
   /* ---------------------------------------------------------------------- */
 
   private scale(): number {
-    return Math.max(0.6, (this.composite?.height ?? 720) / 720);
+    return subtitleScale(this.composite?.width ?? 1280, this.composite?.height ?? 720);
   }
 
   private drawTitleCard(card: TitleCardState | null): void {
@@ -147,7 +157,10 @@ export class Recorder {
     ctx.font = `${Math.round(26 * k)}px VT323, ui-monospace, monospace`;
     ctx.fillText(card.subtitle.toUpperCase(), composite.width / 2, composite.height * 0.43);
     ctx.fillStyle = '#ffd166';
+    // Encolhe o título se não couber na largura (quadro vertical).
     ctx.font = `${Math.round(64 * k)}px VT323, ui-monospace, monospace`;
+    const fit = Math.min(1, (composite.width * 0.9) / Math.max(1, ctx.measureText(card.title).width));
+    if (fit < 1) ctx.font = `${Math.floor(64 * k * fit)}px VT323, ui-monospace, monospace`;
     ctx.fillText(card.title, composite.width / 2, composite.height * 0.52);
     ctx.restore();
   }
@@ -157,7 +170,7 @@ export class Recorder {
     const k = this.scale();
     const { width, height } = this.composite;
     const style = overlay.subtitles;
-    const inset = (style.position === 'top' ? 24 : 28) * k;
+    const inset = subtitleInset(style.position, width, height, k);
     const anchor = overlay.anchor?.bind(overlay);
     drawSubtitles(this.ctx, { width, height, scale: k, inset, time: performance.now() / 1000, anchor }, dialogues, style, overlay.speaker);
   }

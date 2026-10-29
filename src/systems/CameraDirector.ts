@@ -17,13 +17,17 @@ export interface CameraPose {
 
 const DEFAULT_FOV = 50;
 const UP = new THREE.Vector3(0, 1, 0);
+/** Proporção de referência dos presets (quadros mais estreitos se adaptam). */
+const REFERENCE_ASPECT = 16 / 9;
 
 /**
  * Diretor de câmera.
  *
  * - Planos customizados (`cameras` do script) e presets dinâmicos
  *   (wide, medium, close_up, over_shoulder, two_shot, low_angle) que
- *   enquadram atores na posição atual deles.
+ *   enquadram atores na posição atual deles. Os presets se adaptam à
+ *   proporção do quadro: em vídeo vertical, os planos de grupo recuam para
+ *   caber todos na largura.
  * - Transições: posição por Lerp, orientação por Slerp (quaternions), FOV por Lerp.
  *   Misturas aninhadas permitem interromper uma transição no meio.
  * - CAMERA_SHAKE procedural com decaimento exponencial, determinístico no tempo
@@ -179,9 +183,11 @@ export class CameraDirector {
         toSubject.normalize();
         const right = this.tmpC.crossVectors(toSubject, UP).normalize();
         // A linha câmera->sujeito converge; para a cabeça de `over` ficar na borda do
-        // quadro (~0.42 m da linha), o deslocamento lateral cresce quando estão próximos.
+        // quadro (~0.42 m da linha em 16:9), o deslocamento lateral cresce quando estão
+        // próximos. Em quadro estreito a borda fica mais perto da linha.
         const back = 0.9;
-        const lateral = THREE.MathUtils.clamp((0.42 * (sep + back)) / sep, 0.5, 1.4);
+        const narrow = this.narrowness();
+        const lateral = THREE.MathUtils.clamp((0.42 * narrow * (sep + back)) / sep, 0.5 * narrow, 1.4);
         const position = shoulder
           .clone()
           .addScaledVector(toSubject, -back)
@@ -206,9 +212,11 @@ export class CameraDirector {
         const ref = facing.lengthSq() > 0.04 ? facing : new THREE.Vector3(0, 0, 1);
         if (ref.dot(perp) < 0) perp.negate();
         if (spec.side === 'left') perp.negate();
-        const dist = span * 1.25 + 1.6;
+        // Em quadro vertical, abre um pouco a lente e recua até os dois caberem na largura.
+        const fov = this.camera.aspect < 1 ? 55 : 45;
+        const dist = Math.max(span * 1.25 + 1.6, this.fitDistance(span / 2 + 0.55, fov));
         const position = mid.clone().addScaledVector(perp, dist).add(new THREE.Vector3(0, 0.25, 0));
-        return { position, target: mid.add(new THREE.Vector3(0, 0.1, 0)), fov: 45 };
+        return { position, target: mid.add(new THREE.Vector3(0, 0.1, 0)), fov };
       }
       case 'low_angle': {
         if (!subject) return this.wide(spec);
@@ -283,13 +291,23 @@ export class CameraDirector {
     facing.setY(0).normalize();
     const right = this.tmpC.crossVectors(facing, UP).normalize();
     const sideSign = spec.side === 'left' ? -1 : 1;
-    const dist = radius * 2.6 + 3;
+    const dist = Math.max(radius * 2.6 + 3, this.fitDistance(radius + 0.3, DEFAULT_FOV));
     const position = center
       .clone()
       .addScaledVector(facing, dist)
       .addScaledVector(right, sideSign * dist * 0.3)
       .add(new THREE.Vector3(0, 1.4 + radius * 0.3, 0));
     return { position, target: center, fov: DEFAULT_FOV };
+  }
+
+  /** Distância para `halfWidth` metros caberem na metade da largura do quadro. */
+  private fitDistance(halfWidth: number, fov: number): number {
+    return halfWidth / (Math.tan((fov * DEG2RAD) / 2) * this.camera.aspect);
+  }
+
+  /** 1 em 16:9 ou mais largo; menor em quadros mais estreitos (9:16 ≈ 0.32). */
+  private narrowness(): number {
+    return Math.min(1, this.camera.aspect / REFERENCE_ASPECT);
   }
 
   private nearestOther(subject: Actor | undefined): Actor | undefined {

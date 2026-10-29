@@ -1,5 +1,5 @@
 import { ActionRegistry, StoryScriptError, type CompileOptions, type CompiledStory } from './ActionRegistry';
-import { SUBTITLE_POSITIONS, SUBTITLE_STYLES, type ChapterDef, type EventType, type FrameState, type StoryScript } from './types';
+import { ASPECT_RATIOS, SUBTITLE_POSITIONS, SUBTITLE_STYLES, type AspectRatio, type ChapterDef, type EventType, type FrameState, type StoryScript } from './types';
 import { clamp01 } from '../utils/math';
 
 /** Duração das transições em fade entre capítulos (cada metade). */
@@ -67,6 +67,9 @@ function validateProjectStructure(raw: unknown): string[] {
   if (!isObj(raw)) return ['o StoryScript deve ser um objeto JSON'];
   const errs: string[] = [];
   if (!isObj(raw.meta) || typeof raw.meta.title !== 'string') errs.push(`'meta.title' é obrigatório`);
+  if (isObj(raw.meta) && raw.meta.aspect !== undefined && !ASPECT_RATIOS.includes(raw.meta.aspect as AspectRatio)) {
+    errs.push(`'meta.aspect' inválido (use ${ASPECT_RATIOS.join(', ')})`);
+  }
   const hasTimeline = Array.isArray(raw.timeline);
   const hasChapters = Array.isArray(raw.chapters);
   if (!hasTimeline && !hasChapters) errs.push(`informe 'timeline' (cena única) ou 'chapters' (capítulos)`);

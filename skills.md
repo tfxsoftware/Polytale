@@ -39,7 +39,7 @@ expressões, gestos, olhares e efeitos — sempre a serviço da clareza da hist�
 
 ```json
 {
-  "meta": { "title": "string", "author": "string?", "duration": 0, "loop": false },
+  "meta": { "title": "string", "author": "string?", "duration": 0, "loop": false, "aspect": "16:9" },
   "scene": {
     "background": "#rrggbb",
     "sky": { "top": "#rrggbb", "bottom": "#rrggbb" },
@@ -60,6 +60,7 @@ expressões, gestos, olhares e efeitos — sempre a serviço da clareza da hist�
 | `meta.title` | sim | Título exibido no painel. |
 | `meta.duration` | não | Duração mínima (s). Por padrão = fim do último evento. Use para deixar o fade final respirar. |
 | `meta.loop` | não | Reinicia ao terminar. |
+| `meta.aspect` | não | Formato do quadro e do vídeo: `16:9` (paisagem), `9:16` (vertical: Reels/TikTok/Shorts) ou `1:1`. Sem ele, a cena ocupa a janela. Use `9:16` se o usuário pedir reels/vertical/celular. |
 | `scene` | não | Cenário. Sem `lights`, a engine cria hemisfério + sol. |
 | `fx` | não | Pós-processamento retrô inicial (padrão: ligado). |
 | `cameras` | não | Planos fixos nomeados (o primeiro é o plano inicial). |
@@ -276,6 +277,10 @@ Campos comuns a **todos** os eventos:
 
 - Opções: `side` (`"left"`/`"right"`), `fov`, `offset` `[x,y,z]`, `handheld` (0–1, câmera na mão).
 - Presets **acompanham** atores em movimento.
+- Em `meta.aspect: "9:16"` (vertical), os presets se adaptam sozinhos (`wide`/`two_shot` recuam para caber todos).
+  Prefira `close_up`, `medium` e `over_shoulder`, que preenchem bem o quadro estreito. Em planos customizados
+  o `fov` é vertical: no 9:16 o quadro enxerga bem menos na horizontal, então afaste a câmera ou deixe os atores
+  mais próximos entre si.
 - Planos customizados (`cameras[]`): `position`/`lookAt` aceitam `[x,y,z]` ou
   `{ "actor": "kael", "offset": [0, 0.2, 1.5], "local": true, "anchor": "head" }`.
 

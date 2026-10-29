@@ -77,12 +77,24 @@
         },
         "loop": {
           "type": "boolean"
+        },
+        "aspect": {
+          "$ref": "#/definitions/AspectRatio",
+          "description": "Formato do quadro: '16:9' (paisagem), '9:16' (vertical: Reels, TikTok, Shorts) ou '1:1'. A tela mostra o quadro com tarjas e o vídeo sai em 1080p nesse formato. Sem `aspect`, a cena ocupa a janela inteira."
         }
       },
       "required": [
         "title"
       ],
       "additionalProperties": false
+    },
+    "AspectRatio": {
+      "type": "string",
+      "enum": [
+        "16:9",
+        "9:16",
+        "1:1"
+      ]
     },
     "SubtitleDef": {
       "type": "object",

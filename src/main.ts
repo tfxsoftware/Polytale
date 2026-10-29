@@ -4,6 +4,7 @@ import { SceneManager } from './core/SceneManager';
 import { AssetLoader } from './core/AssetLoader';
 import { loadDraft, saveDraft, scriptFromLocation } from './core/ScriptStorage';
 import { ScriptHistory } from './core/ScriptHistory';
+import { aspectValue, exportSize } from './core/VideoFormat';
 import { Timeline } from './timeline/Timeline';
 import { ActionRegistry, StoryScriptError } from './timeline/ActionRegistry';
 import { compileProject, evaluateProject, type CompiledChapter, type CompiledProject } from './timeline/StoryProject';
@@ -77,8 +78,9 @@ const speakerAnchor = (actorId: string): ScreenPoint | null => {
   return { x: (p.x + 1) / 2, y: (1 - p.y) / 2 };
 };
 
-const titleCard = new TitleCard(ui);
-const dialogue = new DialogueBox(ui, speaker);
+// Legendas e cartela ficam dentro do quadro (acompanham as tarjas de meta.aspect).
+const titleCard = new TitleCard(viewport);
+const dialogue = new DialogueBox(viewport, speaker);
 
 const panel = new ControlPanel(ui, {
   onTogglePlay: () => {
@@ -139,6 +141,19 @@ const settings = new SettingsPanel(ui, {
     history.record(next, 'subtitles');
     if (tracks.isOpen) tracks.setScript(next, chapter?.index ?? 0);
   },
+  onAspectChange: (aspect) => {
+    if (!isScript(currentScript) || !project) return;
+    // Os presets de câmera leem a proporção a cada quadro: não precisa recompilar.
+    const meta = { ...currentScript.meta, aspect };
+    if (!aspect) delete meta.aspect;
+    const next: StoryScript = { ...currentScript, meta };
+    currentScript = next;
+    project.script = next;
+    applyFormat();
+    saveDraft(next);
+    history.record(next);
+    if (tracks.isOpen) tracks.setScript(next, chapter?.index ?? 0);
+  },
 });
 
 const editor = new TimelineEditor(ui, {
@@ -179,6 +194,16 @@ function applySubtitles(): void {
   const style = resolveSubtitles(project?.script.subtitles);
   subtitles = subtitlesHidden ? { ...style, enabled: false } : style;
   dialogue.setStyle(subtitles);
+}
+
+/** meta.aspect: quadro com tarjas na tela e legendas na mesma escala do vídeo. */
+function applyFormat(): void {
+  const aspect = project?.script.meta.aspect;
+  viewport.classList.toggle('is-framed', !!aspect);
+  if (aspect) viewport.style.setProperty('--frame-aspect', String(aspectValue(aspect)));
+  else viewport.style.removeProperty('--frame-aspect');
+  dialogue.setFramed(!!aspect);
+  settings.setAspect(aspect);
 }
 
 function isScript(v: unknown): v is StoryScript {
@@ -253,6 +278,7 @@ async function loadStory(raw: unknown, options: LoadOptions = {}): Promise<strin
 
     project = compiled;
     applySubtitles();
+    applyFormat();
     builtChapter = -1; // força reconstruir a cena do capítulo atual
     currentScript = raw;
     timeline.setDuration(compiled.duration);
@@ -293,7 +319,10 @@ const exportOverlay = new ExportOverlay(ui, { onCancel: () => void finishExport(
 /** Velocidade e loop do usuário, restaurados ao fim da geração. */
 let exportRestore: { rate: number; loop: boolean } | null = null;
 
-/** Toca a história do início ao fim gravando o canvas + áudio; baixa o .webm no final. */
+/**
+ * Toca a história do início ao fim gravando o canvas + áudio; baixa o vídeo no final.
+ * Com meta.aspect, renderiza em 1080p no formato escolhido, seja qual for a janela.
+ */
 async function exportVideo(): Promise<void> {
   if (recorder.recording || !project) return;
   if (!Recorder.supported()) {
@@ -309,6 +338,14 @@ async function exportVideo(): Promise<void> {
   timeline.setLoop(false);
   audio.setSpeechAsBabble(true);
   timeline.seek(0);
+  const aspect = project.script.meta.aspect;
+  if (aspect) {
+    const size = exportSize(aspect);
+    const shown = engine.renderer.getDrawingBufferSize(new THREE.Vector2()).height;
+    engine.setRenderSize(size);
+    // Pixels PS1 do mesmo tamanho relativo que na tela.
+    post.setPixelScale(size.height / Math.max(1, shown));
+  }
   recorder.start(30);
   timeline.play();
   panel.setStatus(null);
@@ -319,6 +356,8 @@ async function finishExport(save: boolean): Promise<void> {
   if (!recorder.recording) return;
   timeline.pause();
   const blob = await recorder.stop();
+  engine.setRenderSize(null);
+  post.setPixelScale(1);
   exportOverlay.hide();
   audio.setSpeechAsBabble(false);
   if (exportRestore) {

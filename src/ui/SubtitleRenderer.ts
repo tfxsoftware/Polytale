@@ -61,6 +61,22 @@ export function caretVisible(time: number): boolean {
   return time % 0.8 < 0.4;
 }
 
+/** Pixels por "pixel de design" num quadro de largura × altura (720p = 1). */
+export function subtitleScale(width: number, height: number): number {
+  return Math.max(0.6, Math.min(width, height) / 720);
+}
+
+/**
+ * Distância da borda para legendas 'bottom'/'top'. Em quadro vertical, fica fora
+ * das faixas que a interface do Reels/TikTok/Shorts cobre (legenda do post
+ * embaixo, título em cima).
+ */
+export function subtitleInset(position: SubtitleStyle['position'], width: number, height: number, scale: number): number {
+  const base = (position === 'top' ? 24 : 28) * scale;
+  if (height < width * 1.2) return base;
+  return Math.max(base, height * (position === 'top' ? 0.12 : 0.2));
+}
+
 /** Ponto na tela normalizado (0..1, y para baixo). */
 export interface ScreenPoint {
   x: number;

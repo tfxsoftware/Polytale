@@ -4,6 +4,8 @@ import {
   caretVisible,
   drawSubtitles,
   revealedChars,
+  subtitleInset,
+  subtitleScale,
   visibleDialogues,
   type ScreenPoint,
   type SpeakerInfo,
@@ -26,6 +28,8 @@ export class DialogueBox {
   private readonly live: HTMLDivElement;
   private lastSignature = '';
   private style: SubtitleStyle = SUBTITLE_DEFAULTS;
+  /** Quadro com formato fixo (meta.aspect): mesmas proporções do vídeo exportado. */
+  private framed = false;
 
   constructor(
     parent: HTMLElement,
@@ -45,6 +49,11 @@ export class DialogueBox {
 
   setStyle(style: SubtitleStyle): void {
     this.style = style;
+    this.clear();
+  }
+
+  setFramed(framed: boolean): void {
+    this.framed = framed;
     this.clear();
   }
 
@@ -74,8 +83,12 @@ export class DialogueBox {
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.clearRect(0, 0, w, h);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const inset = style.position === 'top' ? TOP_INSET : BOTTOM_INSET;
-    drawSubtitles(this.ctx, { width: w / dpr, height: h / dpr, scale: 1, inset, time, anchor }, visible, style, this.speaker);
+    const width = w / dpr;
+    const height = h / dpr;
+    // Com formato fixo, a legenda escala com o quadro (igual ao vídeo); sem ele, tamanho fixo em px.
+    const scale = this.framed ? subtitleScale(width, height) : 1;
+    const inset = this.framed ? subtitleInset(style.position, width, height, scale) : style.position === 'top' ? TOP_INSET : BOTTOM_INSET;
+    drawSubtitles(this.ctx, { width, height, scale, inset, time, anchor }, visible, style, this.speaker);
 
     const spoken = visible.map((d) => `${this.speaker(d.actorId).name}: ${d.text}`).join(' ');
     if (this.live.textContent !== spoken) this.live.textContent = spoken;

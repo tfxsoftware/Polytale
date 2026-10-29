@@ -643,12 +643,21 @@ export type StoryEvent =
 export type EventType = StoryEvent['type'];
 export type EventOf<K extends EventType> = Extract<StoryEvent, { type: K }>;
 
+export const ASPECT_RATIOS = ['16:9', '9:16', '1:1'] as const;
+export type AspectRatio = (typeof ASPECT_RATIOS)[number];
+
 export interface StoryMeta {
   title: string;
   author?: string;
   /** Duração mínima; por padrão é o fim do último evento. */
   duration?: number;
   loop?: boolean;
+  /**
+   * Formato do quadro: '16:9' (paisagem), '9:16' (vertical: Reels, TikTok, Shorts)
+   * ou '1:1'. A tela mostra o quadro com tarjas e o vídeo sai em 1080p nesse
+   * formato. Sem `aspect`, a cena ocupa a janela inteira.
+   */
+  aspect?: AspectRatio;
 }
 
 /** Capítulo: uma cena completa (cenário próprio) dentro de uma história maior. */

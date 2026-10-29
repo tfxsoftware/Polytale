@@ -201,6 +201,8 @@ export class PostProcessing {
   private _userEnabled = true;
   private timelineEnabled = true;
   private settings: RetroSettings = { ...DEFAULT_RETRO_SETTINGS };
+  /** Multiplica o pixelSize: mantém o tamanho dos "pixels" PS1 quando a resolução muda (exportação). */
+  private pixelScale = 1;
 
   constructor(
     private readonly renderer: THREE.WebGLRenderer,
@@ -234,8 +236,14 @@ export class PostProcessing {
   }
 
   setSize(width: number, height: number): void {
+    this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.composer.setSize(width, height);
     this.syncSize();
+  }
+
+  setPixelScale(scale: number): void {
+    this.pixelScale = Math.max(0.1, scale);
+    this.updateUniforms();
   }
 
   /** Aplica o estado de efeitos da timeline (retro, parâmetros, fade, flash). */
@@ -270,7 +278,8 @@ export class PostProcessing {
     const s = this.settings;
     const on = this.active;
     u.uEnabled.value = on ? 1 : 0;
-    u.uPixelSize.value = s.pixelSize;
+    const px = Math.max(1, s.pixelSize * this.pixelScale);
+    u.uPixelSize.value = px;
     u.uColorLevels.value = s.colorLevels;
     u.uDither.value = s.dither;
     u.uScanlines.value = s.scanlines;
@@ -279,7 +288,6 @@ export class PostProcessing {
     u.uChromatic.value = s.chromatic;
     u.uNoise.value = s.noise;
     // Grade de snapping proporcional à resolução virtual.
-    const px = Math.max(1, s.pixelSize);
     snapUniforms.uSnapResolution.value.set(Math.max(64, this.size.x / px), Math.max(48, this.size.y / px));
     snapUniforms.uSnapAmount.value = on ? s.vertexSnap : 0;
   }

@@ -23,14 +23,19 @@
       * { box-sizing: border-box; }
       html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); overflow: hidden; }
       #app { position: fixed; inset: 0; }
-      .viewport { position: absolute; inset: 0; }
+      .viewport { position: absolute; inset: 0; container-type: size; overflow: hidden; }
+      /* meta.aspect: quadro no formato do vídeo, centralizado, com tarjas pretas. */
+      .viewport.is-framed {
+        inset: auto; left: 50%; top: 50%; transform: translate(-50%, -50%);
+        width: min(100vw, calc(100vh * var(--frame-aspect))); height: min(100vh, calc(100vw / var(--frame-aspect)));
+      }
       .engine-canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
       .ui-layer { position: absolute; inset: 0; pointer-events: none; }
       .ui-layer > * { pointer-events: auto; }
 
       /* ---------- Legendas ---------- */
       /* Desenhadas por src/ui/SubtitleRenderer.ts (o mesmo código do vídeo exportado). */
-      .ui-layer > .dialogue-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+      .viewport > .dialogue-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
       .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
       @keyframes blink { 50% { opacity: 0; } }
 
@@ -43,6 +48,7 @@
       .settings-panel[hidden] { display: none; }
       .settings-panel h2 { margin: 0; flex: 1; font-size: 24px; font-weight: normal; color: var(--accent-2); }
       .settings-head { display: flex; align-items: center; gap: 8px; }
+      .settings-panel h3 { margin: 4px 0 0; font-size: 16px; font-weight: normal; color: var(--accent); letter-spacing: 1px; text-transform: uppercase; }
       .settings-preview { width: 100%; height: 96px; background: #2a3a2a linear-gradient(180deg, #3b5d7a, #23402c); border: 2px solid var(--border); border-radius: 4px; }
       .settings-row { display: flex; align-items: center; gap: 8px; }
       .settings-row > span:first-child { flex: 1; color: var(--muted); }
@@ -137,8 +143,8 @@
         display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
         background: rgba(0, 0, 0, 0.45);
       }
-      .title-card-sub { font-size: 26px; letter-spacing: 3px; text-transform: uppercase; color: #c9d1ff; }
-      .title-card-main { font-size: clamp(36px, 7vw, 64px); color: var(--accent-2); text-shadow: 3px 3px 0 #000; text-align: center; padding: 0 16px; }
+      .title-card-sub { font-size: clamp(16px, 5cqw, 26px); letter-spacing: 3px; text-transform: uppercase; color: #c9d1ff; }
+      .title-card-main { font-size: clamp(24px, 9cqw, 64px); color: var(--accent-2); text-shadow: 3px 3px 0 #000; text-align: center; padding: 0 16px; }
 
       /* ---------- Gerador IA ---------- */
       .generator-modal { height: min(80vh, 720px); }

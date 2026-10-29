@@ -122,6 +122,7 @@ characters — see section 3.7 of `skills.md`.
 | `o-mapa.json` | `chapters` + `cast`, sunset with `SET_TIME_OF_DAY`, an interior `room` with furniture |
 | `tempestade.json` | Lightning (`SET_LIGHT` + flash + shake + thunder), `SET_RETRO_FX`, a custom gesture, `babble` voice |
 | `somente-leitura.json` | A longer piece (~2 min) |
+| `ultimo-cafe.json` | Vertical 9:16 video (`meta.aspect`) for Reels/TikTok: close-ups, `pickUp` + `give`, an interior `room` |
 
 Every file in `examples/` is compiled and checked for reversible seeking by the test suite, so new examples double as tests.
 

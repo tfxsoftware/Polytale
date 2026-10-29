@@ -33,6 +33,8 @@ export class Engine {
   private fpsFrames = 0;
   private readonly maxDelta: number;
   private readonly maxPixelRatio: number;
+  /** Resolução fixa do quadro (exportação); null = acompanha o container. */
+  private renderSize: { width: number; height: number } | null = null;
 
   constructor(
     private readonly container: HTMLElement,
@@ -86,11 +88,20 @@ export class Engine {
 
   onResize(fn: ResizeFn): () => void {
     this.resizes.add(fn);
-    const { width, height } = this.size();
+    const { width, height } = this.renderSize ?? this.size();
     fn(width, height);
     return () => {
       this.resizes.delete(fn);
     };
+  }
+
+  /**
+   * Fixa a resolução do quadro em pixels reais (pixel ratio 1), independente do
+   * tamanho do container — o canvas continua esticado na tela. null volta ao normal.
+   */
+  setRenderSize(size: { width: number; height: number } | null): void {
+    this.renderSize = size ? { ...size } : null;
+    this.resize();
   }
 
   setRenderer(fn: RenderFn): void {
@@ -151,8 +162,8 @@ export class Engine {
   }
 
   private resize(): void {
-    const { width, height } = this.size();
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.maxPixelRatio));
+    const { width, height } = this.renderSize ?? this.size();
+    this.renderer.setPixelRatio(this.renderSize ? 1 : Math.min(window.devicePixelRatio, this.maxPixelRatio));
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();

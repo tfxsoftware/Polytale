@@ -103,6 +103,14 @@ describe('validação', () => {
     expect(errors).toContain(`'subtitles.margin' deve ser um número >= 0`);
   });
 
+  it('valida o formato do quadro', () => {
+    for (const aspect of ['16:9', '9:16', '1:1']) {
+      expect(compileErrors(registry, { meta: { title: 'x', aspect }, timeline: [] })).toEqual([]);
+    }
+    const errors = compileErrors(registry, { meta: { title: 'x', aspect: '4:3' }, timeline: [] });
+    expect(errors.some((e) => e.startsWith(`'meta.aspect' inválido`))).toBe(true);
+  });
+
   it('prefixa erros com o capítulo', () => {
     const errors = compileErrors(registry, {
       meta: { title: 'x' },
