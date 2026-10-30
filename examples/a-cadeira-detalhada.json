@@ -1,0 +1,55 @@
+{
+  "$schema": "../schema/storyscript.schema.json",
+  "meta": { "title": "A Cadeira (Detalhado)", "author": "Polytale", "aspect": "9:16" },
+  "fx": { "retro": false },
+  "cast": {
+    "hero": { "kind": "actor", "name": "Hero", "color": "#ffd166", "model": "models/character-full.glb", "idleClip": "Idle" }
+  },
+  "cameras": [
+    { "id": "canto", "position": [2.9, 2.1, -2.4], "lookAt": { "actor": "hero", "anchor": "chest" }, "fov": 70 },
+    { "id": "lateral", "position": [1.6, 1.0, -1.0], "lookAt": [-1.5, 0.85, -1.0], "fov": 52 },
+    { "id": "frente", "position": [-1.5, 1.05, 1.6], "lookAt": [-1.5, 0.85, -1.1], "fov": 52 },
+    { "id": "frente_perto", "position": [-1.5, 1.2, 0.2], "lookAt": [-1.5, 1.05, -1.1], "fov": 50 },
+    { "id": "baixo", "position": [-0.8, 0.25, 0.3], "lookAt": [-1.5, 0.85, -1.1], "fov": 62 },
+    { "id": "alto", "position": [-3.0, 2.45, 1.2], "lookAt": [-1.5, 0.6, -1.0], "fov": 62 },
+    { "id": "perfil", "position": [-3.1, 1.0, -1.2], "lookAt": [-1.5, 0.9, -1.2], "fov": 62 },
+    { "id": "ambiente", "position": [2.8, 1.5, 2.4], "lookAt": [-1.5, 0.9, -1.1], "fov": 48 }
+  ],
+  "scene": {
+    "room": { "width": 7, "depth": 6, "height": 2.8, "floor": "wood", "floorColor": "#8a6440", "wallColor": "#c4ae8c",
+      "doors": [ { "wall": "south", "offset": 0 } ], "windows": [ { "wall": "west", "offset": 0.4 }, { "wall": "north", "offset": 1.5 } ] },
+    "background": "#0c0a08",
+    "lights": [
+      { "id": "amb", "type": "hemisphere", "color": "#e6d4b8", "groundColor": "#3a2a1a", "intensity": 1.3 },
+      { "id": "teto", "type": "point", "color": "#ffd59a", "intensity": 10, "position": [-0.6, 2.5, -0.3], "distance": 11, "castShadow": true }
+    ],
+    "props": [
+      { "prop": "chair", "position": [-1.5, 0, -1.2] },
+      { "prop": "rug", "position": [-1.5, 0.01, -0.4] },
+      { "prop": "bookshelf", "position": [1.6, 0, -2.75] },
+      { "prop": "table", "position": [2.4, 0, 0.6], "rotation": 90 },
+      { "prop": "lamp", "position": [3, 0, -2.5] }
+    ]
+  },
+  "timeline": [
+    { "time": 0, "type": "SPAWN_OBJECT", "target": "hero", "position": [0, 0, 3.6], "rotation": [0, -160, 0] },
+    { "time": 0, "type": "PLAY_ANIMATION", "target": "hero", "clip": "Walking", "loop": true },
+    { "time": 0, "type": "CAMERA_CUT", "shot": "canto" },
+
+    { "time": 0.2, "type": "TRANSFORM_OBJECT", "target": "hero", "position": [-1.5, 0, -0.72], "duration": 2.86, "easing": "linear" },
+    { "time": 1.2, "type": "PLAY_SOUND", "src": "procedural:door", "volume": 0.5 },
+
+    { "time": 3.0, "type": "CAMERA_CUT", "shot": "lateral" },
+    { "time": 3.0, "type": "TRANSFORM_OBJECT", "target": "hero", "rotation": [0, 0, 0], "duration": 0.7, "easing": "easeInOutQuad" },
+    { "time": 3.45, "type": "PLAY_ANIMATION", "target": "hero", "clip": "Talking", "loop": true, "fade": 0.9 },
+    { "time": 3.45, "type": "TRANSFORM_OBJECT", "target": "hero", "position": [-1.5, 0, -1.12], "duration": 0.9, "easing": "easeInOutQuad" },
+
+    { "time": 6, "type": "CAMERA_CUT", "shot": "frente" },
+    { "time": 6, "type": "CAMERA_TRANSITION", "shot": "frente_perto", "duration": 3.5, "easing": "easeInOutSine" },
+    { "time": 10, "type": "CAMERA_CUT", "shot": "baixo" },
+    { "time": 13, "type": "CAMERA_CUT", "shot": "alto" },
+    { "time": 16, "type": "CAMERA_CUT", "shot": "perfil" },
+    { "time": 19, "type": "CAMERA_CUT", "shot": "ambiente" },
+    { "time": 21.5, "type": "FADE_SCREEN", "to": 1, "duration": 1.5 }
+  ]
+}

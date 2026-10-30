@@ -760,7 +760,11 @@ export class SceneManager implements ActorProvider {
         default: {
           const p = new THREE.PointLight(color, intensity, def.distance ?? 0, 1.6);
           p.castShadow = def.castShadow ?? false;
-          if (p.castShadow) p.shadow.mapSize.set(512, 512);
+          if (p.castShadow) {
+            p.shadow.mapSize.set(512, 512);
+            p.shadow.bias = -0.0006;
+            p.shadow.normalBias = 0.02;
+          }
           light = p;
           break;
         }

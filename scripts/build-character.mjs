@@ -1,8 +1,9 @@
 /**
  * Gera uma versão low poly de um avatar GLB e embute clipes FBX do Mixamo no mesmo arquivo.
  *
- *   node scripts/build-character.mjs [entrada.glb] [saida.glb] [Clipe.fbx ...]
+ *   node scripts/build-character.mjs [--full] [entrada.glb] [saida.glb] [Clipe.fbx ...]
  *
+ * Com --full, malha e materiais ficam intactos e só os clipes são embutidos.
  * Reduz a malha, descarta normais (o GLTFLoader passa a usar flat shading), troca o PBR por
  * uma única textura pequena sem filtragem e copia as trilhas dos FBX para o esqueleto do GLB.
  * Os clipes precisam vir de um esqueleto com os mesmos nomes de ossos. Requer ffmpeg no PATH.
@@ -14,7 +15,10 @@ import path from 'node:path';
 import { MeshoptSimplifier } from 'meshoptimizer';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 
-const [input = 'public/models/character.glb', output = 'public/models/character-lowpoly.glb', ...clipArgs] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const full = args.includes('--full');
+const defaultOutput = full ? 'public/models/character-full.glb' : 'public/models/character-lowpoly.glb';
+const [input = 'public/models/character.glb', output = defaultOutput, ...clipArgs] = args.filter((a) => a !== '--full');
 const clipFiles = clipArgs.length ? clipArgs : ['public/models/Walking.fbx', 'public/models/Talking.fbx'];
 
 /** Triângulos e tamanho da textura por malha (a do corpo guarda o rosto). */
@@ -69,6 +73,16 @@ class GlbWriter {
   byteLength = 0;
   bufferViews = [];
   accessors = [];
+
+  /** Parte do buffer original: índices de accessors e bufferViews existentes continuam válidos. */
+  static extending({ json, bin }) {
+    const writer = new GlbWriter();
+    writer.bufferViews = [...json.bufferViews];
+    writer.accessors = [...json.accessors];
+    writer.view(bin);
+    writer.bufferViews.pop();
+    return writer;
+  }
 
   view(bytes) {
     this.bufferViews.push({ buffer: 0, byteOffset: this.byteLength, byteLength: bytes.byteLength });
@@ -214,73 +228,85 @@ await MeshoptSimplifier.ready;
 MeshoptSimplifier.useExperimentalFeatures = true;
 const glb = readGlb(input);
 const { json } = glb;
-const writer = new GlbWriter();
+const writer = full ? GlbWriter.extending(glb) : new GlbWriter();
 
-const meshes = json.meshes.map((m) => {
-  const p = m.primitives[0];
-  const a = p.attributes;
-  const weights = readWeights(glb, a.WEIGHTS_0);
-  // Só o primeiro conjunto de influências chega ao three.js: os pesos precisam somar 1 sem o segundo.
-  for (let i = 0; i < weights.length; i += MAX_INFLUENCES) {
-    const sum = weights[i] + weights[i + 1] + weights[i + 2] + weights[i + 3] || 1;
-    for (let k = 0; k < MAX_INFLUENCES; k++) weights[i + k] /= sum;
-  }
-  return {
+/** Malhas e materiais reduzidos, gravados em `writer`. */
+function buildLowPoly() {
+  const meshes = json.meshes.map((m) => {
+    const p = m.primitives[0];
+    const a = p.attributes;
+    const weights = readWeights(glb, a.WEIGHTS_0);
+    // Só o primeiro conjunto de influências chega ao three.js: os pesos precisam somar 1 sem o segundo.
+    for (let i = 0; i < weights.length; i += MAX_INFLUENCES) {
+      const sum = weights[i] + weights[i + 1] + weights[i + 2] + weights[i + 3] || 1;
+      for (let k = 0; k < MAX_INFLUENCES; k++) weights[i + k] /= sum;
+    }
+    return {
+      name: m.name,
+      material: json.materials[p.material],
+      positions: readAccessor(glb, a.POSITION),
+      normals: readAccessor(glb, a.NORMAL),
+      uvs: readAccessor(glb, a.TEXCOORD_0),
+      joints: readAccessor(glb, a.JOINTS_0),
+      weights,
+      indices: Uint32Array.from(readAccessor(glb, p.indices)),
+    };
+  });
+
+  const clothes = meshes.filter((m) => /look|shoes/.test(m.name));
+  const reduced = meshes.map((source) => {
+    const mesh = /body/.test(source.name) ? cullCovered(source, clothes) : source;
+    const { tris } = TARGETS[mesh.name] ?? DEFAULT_TARGET;
+    const [indices] = MeshoptSimplifier.simplifyWithAttributes(mesh.indices, mesh.positions, 3, mesh.uvs, 2, [0.5, 0.5], null, tris * 3, 1);
+    console.log(`${mesh.name}: ${source.indices.length / 3} -> ${mesh.indices.length / 3} (roupa) -> ${indices.length / 3} tris`);
+    return compact(mesh, indices);
+  });
+
+  const images = [];
+  const textures = [];
+  const materials = reduced.map((m) => {
+    const source = json.images[json.textures[m.material.pbrMetallicRoughness.baseColorTexture.index].source];
+    const view = json.bufferViews[source.bufferView];
+    const bytes = glb.bin.subarray(view.byteOffset ?? 0, (view.byteOffset ?? 0) + view.byteLength);
+    images.push({ bufferView: writer.view(shrinkTexture(bytes, (TARGETS[m.name] ?? DEFAULT_TARGET).texture)), mimeType: 'image/png' });
+    textures.push({ source: images.length - 1, sampler: 0 });
+    const blend = m.material.alphaMode === 'BLEND';
+    return {
+      name: m.material.name,
+      pbrMetallicRoughness: { baseColorTexture: { index: textures.length - 1 }, metallicFactor: 0, roughnessFactor: 1 },
+      doubleSided: true,
+      // Transparência com recorte: cabelo em cartões não sofre com a ordem de desenho.
+      ...(blend ? { alphaMode: 'MASK', alphaCutoff: 0.5 } : {}),
+    };
+  });
+
+  const outMeshes = reduced.map((m, i) => ({
     name: m.name,
-    material: json.materials[p.material],
-    positions: readAccessor(glb, a.POSITION),
-    normals: readAccessor(glb, a.NORMAL),
-    uvs: readAccessor(glb, a.TEXCOORD_0),
-    joints: readAccessor(glb, a.JOINTS_0),
-    weights,
-    indices: Uint32Array.from(readAccessor(glb, p.indices)),
-  };
-});
-
-const clothes = meshes.filter((m) => /look|shoes/.test(m.name));
-const reduced = meshes.map((source) => {
-  const mesh = /body/.test(source.name) ? cullCovered(source, clothes) : source;
-  const { tris } = TARGETS[mesh.name] ?? DEFAULT_TARGET;
-  const [indices] = MeshoptSimplifier.simplifyWithAttributes(mesh.indices, mesh.positions, 3, mesh.uvs, 2, [0.5, 0.5], null, tris * 3, 1);
-  console.log(`${mesh.name}: ${source.indices.length / 3} -> ${mesh.indices.length / 3} (roupa) -> ${indices.length / 3} tris`);
-  return compact(mesh, indices);
-});
-
-const images = [];
-const textures = [];
-const materials = reduced.map((m) => {
-  const source = json.images[json.textures[m.material.pbrMetallicRoughness.baseColorTexture.index].source];
-  const view = json.bufferViews[source.bufferView];
-  const bytes = glb.bin.subarray(view.byteOffset ?? 0, (view.byteOffset ?? 0) + view.byteLength);
-  images.push({ bufferView: writer.view(shrinkTexture(bytes, (TARGETS[m.name] ?? DEFAULT_TARGET).texture)), mimeType: 'image/png' });
-  textures.push({ source: images.length - 1, sampler: 0 });
-  const blend = m.material.alphaMode === 'BLEND';
-  return {
-    name: m.material.name,
-    pbrMetallicRoughness: { baseColorTexture: { index: textures.length - 1 }, metallicFactor: 0, roughnessFactor: 1 },
-    doubleSided: true,
-    // Transparência com recorte: cabelo em cartões não sofre com a ordem de desenho.
-    ...(blend ? { alphaMode: 'MASK', alphaCutoff: 0.5 } : {}),
-  };
-});
-
-const outMeshes = reduced.map((m, i) => ({
-  name: m.name,
-  primitives: [
-    {
-      material: i,
-      indices: writer.accessor(m.indices, 'SCALAR'),
-      attributes: {
-        POSITION: writer.accessor(m.positions, 'VEC3', true),
-        TEXCOORD_0: writer.accessor(m.uvs, 'VEC2'),
-        JOINTS_0: writer.accessor(m.joints, 'VEC4'),
-        WEIGHTS_0: writer.accessor(m.weights, 'VEC4'),
+    primitives: [
+      {
+        material: i,
+        indices: writer.accessor(m.indices, 'SCALAR'),
+        attributes: {
+          POSITION: writer.accessor(m.positions, 'VEC3', true),
+          TEXCOORD_0: writer.accessor(m.uvs, 'VEC2'),
+          JOINTS_0: writer.accessor(m.joints, 'VEC4'),
+          WEIGHTS_0: writer.accessor(m.weights, 'VEC4'),
+        },
       },
-    },
-  ],
-}));
+    ],
+  }));
 
-const skins = json.skins.map((s) => ({ ...s, inverseBindMatrices: writer.accessor(readAccessor(glb, s.inverseBindMatrices), 'MAT4') }));
+  const skins = json.skins.map((s) => ({ ...s, inverseBindMatrices: writer.accessor(readAccessor(glb, s.inverseBindMatrices), 'MAT4') }));
+
+  return {
+    meshes: outMeshes,
+    skins: json.skins.map((s) => ({ ...s, inverseBindMatrices: writer.accessor(readAccessor(glb, s.inverseBindMatrices), 'MAT4') })),
+    materials,
+    textures,
+    images,
+    samplers: [{ magFilter: GL.NEAREST, minFilter: GL.NEAREST }],
+  };
+}
 
 const nodeIndex = new Map(json.nodes.map((n, i) => [n.name, i]));
 const animations = json.animations.map((a, i) => ({
@@ -314,17 +340,6 @@ for (const file of clipFiles) {
   console.log(`clipe ${name}: ${clip.duration.toFixed(2)}s, ${channels.length} trilhas`);
 }
 
-writer.write(output, {
-  asset: { version: '2.0', generator: 'Polytale build-character' },
-  scene: json.scene ?? 0,
-  scenes: json.scenes,
-  nodes: json.nodes,
-  meshes: outMeshes,
-  skins,
-  animations,
-  materials,
-  textures,
-  images,
-  samplers: [{ magFilter: GL.NEAREST, minFilter: GL.NEAREST }],
-});
+const assets = full ? {} : buildLowPoly();
+writer.write(output, { ...json, ...assets, asset: { version: '2.0', generator: 'Polytale build-character' }, animations });
 console.log(`${output}: ${(fs.statSync(output).size / 1024).toFixed(0)} KB`);

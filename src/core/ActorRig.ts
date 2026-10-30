@@ -391,6 +391,8 @@ export function buildGltfRig(gltf: GLTF): GltfRig {
     if (!mesh.isMesh) return;
     mesh.castShadow = true;
     mesh.receiveShadow = true;
+    // O volume de culling é o da pose de repouso: um ator sentado em close sumiria do quadro.
+    mesh.frustumCulled = false;
     const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     mats.forEach((m) => applyStyleShader(m));
   });
