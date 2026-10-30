@@ -16,6 +16,7 @@ export class ExportOverlay {
   private readonly root: HTMLDivElement;
   private readonly fill: HTMLDivElement;
   private readonly info: HTMLDivElement;
+  private readonly title: HTMLDivElement;
 
   constructor(
     parent: HTMLElement,
@@ -28,9 +29,9 @@ export class ExportOverlay {
     const card = document.createElement('div');
     card.className = 'export-card';
     card.setAttribute('role', 'status');
-    const title = document.createElement('div');
-    title.className = 'export-title';
-    title.textContent = '⬇ Gerando vídeo…';
+    this.title = document.createElement('div');
+    this.title.className = 'export-title';
+    this.title.textContent = '⬇ Gerando vídeo…';
     const bar = document.createElement('div');
     bar.className = 'export-bar';
     this.fill = document.createElement('div');
@@ -47,7 +48,7 @@ export class ExportOverlay {
     cancel.textContent = 'CANCELAR';
     cancel.title = 'Cancelar (Esc)';
     cancel.addEventListener('click', () => this.cb.onCancel());
-    card.append(title, bar, this.info, hint, cancel);
+    card.append(this.title, bar, this.info, hint, cancel);
     this.root.append(card);
     parent.append(this.root);
 
@@ -65,7 +66,8 @@ export class ExportOverlay {
     return !this.root.hidden;
   }
 
-  show(): void {
+  show(title = '⬇ Gerando vídeo…'): void {
+    this.title.textContent = title;
     this.setProgress(0, 0);
     this.root.hidden = false;
   }

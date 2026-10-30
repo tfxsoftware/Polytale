@@ -51,6 +51,7 @@ export class AssetLoader {
     };
     const scenes = [script.scene, ...(script.chapters ?? []).map((c) => c?.scene)];
     for (const scene of scenes) {
+      if (scene?.backdrop) textures.add(scene.backdrop);
       for (const p of scene?.props ?? []) addObject(p);
       for (const l of scene?.lights ?? []) {
         if (l.cookie && !(LIGHT_COOKIE_PRESETS as readonly string[]).includes(l.cookie)) textures.add(l.cookie);

@@ -39,7 +39,8 @@ import {
   type StoryScript,
   type Vec3,
 } from './types';
-import { hashString, hexToRgb, isHexColor, lerp } from '../utils/math';
+import { hashString, hexToRgb, isHexColor, lerp, seededRandom } from '../utils/math';
+import { wordTimings } from '../utils/wordTiming';
 import { poseFrameFrom, resolvePose, validatePoseDef } from './poses';
 import { expandInteraction, validateInteraction } from './interactions';
 import { Interp } from './easing';
@@ -152,12 +153,50 @@ function shotSpecOf(ev: CameraShotSpec): CameraShotSpec {
 
 /** Quanto tempo um plano de inserção (`cutaway`) fica no ar antes de voltar para quem fala. */
 const INSERT_SECONDS = 1.2;
+/** Menor plano gerado por um corte no meio da fala (ou metade de `maxShotSeconds`, se for menor). */
+const MIN_SPLIT_SECONDS = 1.5;
 
 function resolveAutoCamera(script: StoryScript): Required<AutoCameraDef> | null {
   const raw = script.meta?.autoCamera;
   if (!raw) return null;
   const def = raw === true ? {} : raw;
-  return { maxShotSeconds: def.maxShotSeconds ?? 4, wideEvery: def.wideEvery ?? 4 };
+  return { maxShotSeconds: def.maxShotSeconds ?? 4, wideEvery: def.wideEvery ?? 4, drift: def.drift ?? true };
+}
+
+/** Deriva discreta e sorteada por corte: mesmo script, mesmo movimento. Insertes ficam perto do objeto, então empurram menos. */
+function autoDrift(cut: CameraCutEvent, seed: string): void {
+  const rand = seededRandom(hashString(`${seed}:${cut.time}`));
+  const push = 0.03 + rand() * 0.07;
+  const pan = (0.5 + rand() * 1.5) * (rand() < 0.5 ? -1 : 1);
+  cut.drift = { push: cut.label === 'auto-coverage (insert)' ? push / 2 : push, pan };
+}
+
+/**
+ * Instantes (s desde o início da fala) dos cortes que mantêm cada plano em até `maxShot`,
+ * levados à fronteira de palavra mais próxima. `minimum` força cortes mesmo em fala curta (insertes).
+ */
+function splitTimes(text: string, speak: number, maxShot: number, minimum: number): number[] {
+  const shots = Math.max(minimum + 1, Math.ceil(speak / maxShot));
+  const minGap = Math.min(MIN_SPLIT_SECONDS, maxShot / 2);
+  const boundaries = wordTimings(text, speak)
+    .slice(1)
+    .map((w) => w.start);
+  const out: number[] = [];
+  for (let i = 1; i < shots; i++) {
+    const wanted = (speak * i) / shots;
+    if (!boundaries.length) {
+      out.push(wanted);
+      continue;
+    }
+    const previous = out[out.length - 1] ?? 0;
+    let options = boundaries.filter((b) => b - previous >= minGap && speak - b >= minGap);
+    // Corte obrigatório (inserte) em fala curta: melhor um plano curto do que perder o inserte.
+    if (!options.length && i <= minimum) options = boundaries;
+    if (!options.length) continue;
+    // Empate (com folga para o arredondamento): fica a fronteira mais cedo.
+    out.push(options.reduce((best, b) => (Math.abs(b - wanted) < Math.abs(best - wanted) - 1e-6 ? b : best)));
+  }
+  return out;
 }
 
 /** Já existe um CAMERA_CUT/CAMERA_TRANSITION escrito à mão perto deste instante? Esse sempre vence. */
@@ -208,35 +247,44 @@ function autoCoverageOf(ev: PlayAudioWithLipsyncEvent, ctx: CompileContext): Sto
   if (n < 0) return [];
   const listener = nearestListener(ctx, ev.target, ev.time);
   const out: CameraCutEvent[] = [];
+  const shot = chooseAutoShot(n, auto, !!listener);
+  let onSpeaker = !shot.reaction;
 
   if (!hasExplicitCameraNear(timeline, ev.time, ev.time + speak)) {
-    const shot = chooseAutoShot(n, auto, !!listener);
     const spec: CameraCutEvent = { time: ev.time, type: 'CAMERA_CUT', preset: shot.preset, label: 'auto-coverage' };
     if (shot.preset !== 'wide') spec.subject = shot.reaction ? listener : ev.target;
     if (shot.preset === 'over_shoulder') spec.over = listener;
     out.push(spec);
   }
 
-  // No meio da fala: plano de inserção no objeto citado (`cutaway`) ou, em falas longas, reação de quem escuta.
-  const insert = ev.cutaway && ctx.objects.has(ev.cutaway) ? ev.cutaway : null;
-  if (insert || (listener && speak > auto.maxShotSeconds)) {
-    const midTime = ev.time + Math.min(auto.maxShotSeconds, speak * 0.5);
-    if (!hasExplicitCameraNear(timeline, midTime, midTime + 0.01)) {
-      out.push({
-        time: midTime,
-        type: 'CAMERA_CUT',
-        preset: insert ? 'close_up' : 'medium',
-        subject: insert ?? listener,
-        label: insert ? 'auto-coverage (insert)' : 'auto-coverage',
-      });
-      // O plano de inserção é rápido: volta para quem fala se ainda sobrar fala.
-      const backTime = midTime + INSERT_SECONDS;
-      if (insert && backTime < ev.time + speak && !hasExplicitCameraNear(timeline, backTime, backTime + 0.01)) {
-        out.push({ time: backTime, type: 'CAMERA_CUT', preset: 'close_up', subject: ev.target, label: 'auto-coverage' });
-      }
-    }
-  }
+  // No meio da fala: primeiro o plano de inserção no objeto citado (`cutaway`), se houver; depois alterna
+  // entre quem fala e quem escuta (sem ouvinte, entre dois enquadramentos de quem fala).
+  const guard = Math.min(MIN_SPLIT_SECONDS, auto.maxShotSeconds / 2);
+  const free = (t: number) => !hasExplicitCameraNear(timeline, t - guard, t + guard);
+  let insert = ev.cutaway && ctx.objects.has(ev.cutaway) ? ev.cutaway : null;
+  const splits = splitTimes(ev.text, speak, auto.maxShotSeconds, insert ? 1 : 0).map((t) => ev.time + t);
 
+  splits.forEach((time, i) => {
+    if (!free(time)) return;
+    if (insert) {
+      out.push({ time, type: 'CAMERA_CUT', preset: 'close_up', subject: insert, label: 'auto-coverage (insert)' });
+      insert = null;
+      // O plano de inserção é rápido: volta para quem fala se ainda sobrar fala antes do próximo corte.
+      const backTime = time + INSERT_SECONDS;
+      const next = splits[i + 1] ?? ev.time + speak;
+      if (backTime < next && free(backTime)) out.push({ time: backTime, type: 'CAMERA_CUT', preset: 'close_up', subject: ev.target, label: 'auto-coverage' });
+      onSpeaker = true;
+      return;
+    }
+    if (onSpeaker) {
+      out.push({ time, type: 'CAMERA_CUT', preset: 'medium', subject: listener ?? ev.target, label: 'auto-coverage' });
+    } else {
+      out.push({ time, type: 'CAMERA_CUT', preset: 'close_up', subject: ev.target, label: 'auto-coverage' });
+    }
+    onSpeaker = !onSpeaker;
+  });
+
+  if (auto.drift) for (const cut of out) autoDrift(cut, ev.target);
   return out;
 }
 
@@ -396,6 +444,8 @@ export function createDefaultHandlers(): HandlerMap {
             errs.push(...validateActorStyle(ev.object));
           } else if (ev.object.kind === 'prop') {
             if (typeof ev.object.prop !== 'string') errs.push(`'object.prop' é obrigatório para props`);
+            const feed = ev.object.screen?.camera;
+            if (feed !== undefined && !ctx.shots.has(feed)) errs.push(`'screen.camera': plano '${feed}' não existe em 'cameras'`);
           } else errs.push(`'object.kind' deve ser 'actor' ou 'prop'`);
         }
         if (ev.position !== undefined && !isVec3(ev.position)) errs.push(`'position' deve ser [x, y, z]`);

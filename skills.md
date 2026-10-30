@@ -91,13 +91,14 @@ expressões, gestos, olhares e efeitos — sempre a serviço da clareza da hist�
 | `castShadow` | directional/point/spot | Directional: padrão `true`. Use no máx. 2 luzes com sombra. |
 | `distance`, `angle` | point/spot | Alcance (m) e abertura (graus). |
 | `flicker` | todos | 0–1, oscilação procedural (fogo, vela, neon defeituoso). |
+| `cookie` | spot | Padrão projetado na cena: `blinds` (persiana), `window` (caixilho), `leaves` (folhagem) ou a URL de uma imagem. Ótimo para listras de luz sobre rostos e chão. |
 
 > Truque: declare luzes "dormentes" com `intensity: 0` (ex.: relâmpago, magia) e acenda-as com `SET_LIGHT`.
 
 ### 3.3 Props (cenografia)
 
 `prop`: `tree`, `pine`, `rock`, `crate`, `campfire`, `pillar`, `lamp`, `stool` (banco, assento a 0,45 m),
-`orb` (orbe luminoso), `book`, `cup`, `model` (GLTF via `"model": "models/arquivo.glb"`), `particles`.
+`orb` (orbe luminoso), `book`, `cup`, `model` (GLTF via `"model": "models/arquivo.glb"`), `particles`, `screen`.
 
 Objetos **manipuláveis** (pegar, entregar, largar) devem ser props pequenos (`orb`, `book`, `cup`) criados por
 `SPAWN_OBJECT`. A origem de `orb`/`book`/`cup` é o centro do objeto: no chão use `y` ≈ 0,09 (orb), 0,02 (book), 0,05 (cup);
@@ -107,6 +108,19 @@ sobre uma mesa (`table`, tampo a 0,78 m) use `y` ≈ 0,8.
 determinística (seed + tempo, o seek continua reversível). Ex.: `{ "prop": "particles", "particles": { "preset": "steam" },
 "position": [0, 0.1, -1.2] }` perto de uma `campfire`, ou `"smoke"` saindo de uma chaminé. `color` sobrescreve a cor do
 preset.
+
+`prop: "screen"` com `screen: { ... }` — monitor, TV ou painel, voltado para +Z local (use `rotation` para virá-lo):
+
+- `camera`: id de um plano em `cameras[]`; a tela mostra ao vivo o que esse plano vê (câmera de segurança, TV
+  transmitindo a cena). Funciona no seek e na exportação. Não use mais que 2–3 por cena: cada uma redesenha a cena.
+- `src`: imagem ou vídeo (`.mp4`, `.webm`, `.ogg`). **Vídeo não sincroniza na exportação** e não acompanha o seek;
+  prefira imagem ou `camera`. `loop` (padrão `true`) só vale para vídeo.
+- `width`, `height` em metros (padrão 1,6 × 0,9); `effect`: `lcd`, `dots` (LED) ou `crt`.
+- `bezel: false` tira a moldura: vira um plano 2D de cenário, e a transparência da imagem recorta o contorno
+  (árvore pintada, sprite pixel art).
+
+`scene.backdrop`: URL de uma imagem que preenche o quadro atrás de tudo (cenário pintado). Não combine com `sky` nem
+`timeOfDay`. O chão continua na frente da imagem.
 
 **Mobília (interiores):** `table` (1,2 × 0,7 m, tampo a 0,78 m), `chair` (assento a 0,47 m, encosto em −Z local:
 gire 180° para quem senta olhar para −Z), `bookshelf` (1,0 × 1,9 m), `bed` (1,05 × 2,05 m), `rug` (2 × 1,4 m),
@@ -119,7 +133,7 @@ Campos opcionais de `object` para atores procedurais:
 | Campo | Valores |
 |---|---|
 | `build` | `slim`, `average` (padrão), `athletic`, `heavy` |
-| `headShape` | `box` (padrão), `round` (bola facetada), `egg` (ovo alto), `bulb` (cérebro enorme, queixo fino), `pear` (pera), `cone` (cabeça pontuda), `can` (lata), `wide` (achatada e larga) |
+| `headShape` | `box` (padrão), `round` (bola facetada), `egg` (ovo alto), `bulb` (cérebro enorme, queixo fino), `pear` (pera), `cone` (cabeça pontuda), `can` (lata), `wide` (achatada e larga), `screen` (robô com rosto em tela: olhos e boca brilhantes reagem a `SET_EXPRESSION` e à fala) |
 | `hair` | `short` (padrão), `long`, `ponytail`, `bun`, `spiky`, `mohawk`, `bald` |
 | `outfit` | `casual` (padrão), `robe` (túnica longa), `dress` (vestido) |
 | `accessories` | lista com `hat`, `wizardHat`, `cap`, `crown`, `glasses`, `beard`, `mustache`, `scarf`, `backpack`, `cape` |
@@ -295,6 +309,10 @@ Campos comuns a **todos** os eventos:
 | `two_shot` | `subject` (+ `over`) | Dois atores lado a lado, perfil. |
 | `low_angle` | `subject` | Contra-plongée: poder, ameaça, mistério. |
 
+- `close_up` e `medium` também aceitam como `subject` um prop criado por `SPAWN_OBJECT`: é o plano de inserção
+  (B-roll). Ex.: `{ "time": 12, "type": "CAMERA_CUT", "preset": "close_up", "subject": "hamburguer" }` quando a fala
+  cita o objeto. Props de `scene.props` não têm id e não podem ser enquadrados.
+
 - Opções: `side` (`"left"`/`"right"`), `fov`, `offset` `[x,y,z]`, `handheld` (0–1, câmera na mão).
 - `drift` (opcional): deriva lenta e contínua enquanto o plano fica ativo, em vez de uma câmera parada —
   `{ "push": 0.08, "pan": 1.5 }` (`push` m/s na direção do alvo, aproximando; `pan` graus/s orbitando o alvo;
@@ -309,11 +327,14 @@ Campos comuns a **todos** os eventos:
   `{ "actor": "kael", "offset": [0, 0.2, 1.5], "local": true, "anchor": "head" }`.
 - `meta.autoCamera` (ou por capítulo): cobertura automática — gera um `CAMERA_CUT` por
   `PLAY_AUDIO_WITH_LIPSYNC`, variando entre `close_up` de quem fala, reação de quem escuta e
-  `over_shoulder`, com um `wide` a cada `wideEvery` falas (padrão 4) e um corte de reação no meio de
+  `over_shoulder`, com um `wide` a cada `wideEvery` falas (padrão 4) e cortes de reação em
   falas mais longas que `maxShotSeconds` (padrão 4). **Nunca** sobrepõe um `CAMERA_CUT`/`CAMERA_TRANSITION`
   que você já colocou perto do mesmo instante — útil para um primeiro rascunho rápido ou cenas sem
   direção de câmera própria; `true` usa os padrões, ou `{ "wideEvery": 6, "maxShotSeconds": 5 }` para
-  ajustar.
+  ajustar. Nenhum plano passa de `maxShotSeconds`: falas longas ganham quantos cortes precisarem, nas fronteiras
+  de palavra, e cada plano gerado tem uma deriva lenta (`"drift": false` desliga). Com `autoCamera`, marque em `PLAY_AUDIO_WITH_LIPSYNC` o objeto citado com `"cutaway": "<id do prop>"`:
+  a cobertura corta para ele no meio da fala e volta para quem fala. Sempre que uma fala mencionar um objeto
+  visível da cena, adicione o `cutaway`.
 
 ### 4.6 `CAMERA_SHAKE` — tremor
 
@@ -396,6 +417,9 @@ Campos comuns a **todos** os eventos:
 - `fx.grade` (no topo do script ou por capítulo, ao lado de `fx.retro`): `"none"` (padrão), `"warm"`
   (pôr do sol, sombras levantadas), `"cool"` ou `"noir"` (quase dessaturado). Funciona com ou sem o
   retro FX ligado.
+- `fx.dof` (desfoque de fundo): `{ "aperture": 0.025, "focus"?: 3 }`. Sem `focus`, foca sozinho no alvo de cada plano.
+- `fx.bloom` (brilho em áreas claras e emissivas): `{ "strength": 0.6, "radius": 0.4, "threshold": 0.85 }`.
+  Os dois são independentes do retro FX: para um visual liso e brilhante, use-os com `fx.retro: false`.
 
 ```json
 { "time": 58, "type": "SHOW_TITLE", "title": "FIM", "subtitle": "obrigado por assistir", "duration": 3.5, "overlay": true }

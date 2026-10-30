@@ -24,6 +24,9 @@ const MIME_CANDIDATES = [
   'video/webm',
 ];
 
+/** Amostras guardadas pelo analisador do medidor: cobrem ~170 ms, ou seja, quadros de até ~6 fps sem perder áudio. */
+const LOUDNESS_WINDOW = 8192;
+
 /**
  * Grava a cena em .mp4 (ou .webm, se o navegador não gravar MP4): vídeo do canvas WebGL (com legendas e cartelas
  * desenhadas por cima) + áudio da mixagem da engine.
@@ -40,10 +43,12 @@ export class Recorder {
   private chunks: Blob[] = [];
   private stopped: Promise<Blob> | null = null;
   private startedAt = 0;
-  private loudnessAnalyser: AnalyserNode | null = null;
+  private exportGain: GainNode | null = null;
+  private loudnessAnalysers: AnalyserNode[] = [];
   private loudnessMeter: LoudnessMeter | null = null;
-  private loudnessBuffer: Float32Array<ArrayBuffer> | null = null;
-  /** LUFS integrado (aproximado) medido na última gravação; null antes/sem medição. */
+  private loudnessBuffers: Float32Array<ArrayBuffer>[] = [];
+  private measuredUntil = 0;
+  /** LUFS integrado medido na última gravação (o que foi para o arquivo); null antes/sem medição. */
   measuredLUFS: number | null = null;
 
   constructor(
@@ -65,7 +70,8 @@ export class Recorder {
     return this.recording ? (performance.now() - this.startedAt) / 1000 : 0;
   }
 
-  start(fps = 30): void {
+  /** `gain`: ganho linear aplicado só à gravação (a saída nas caixas de som não muda). */
+  start(fps = 30, gain = 1): void {
     if (this.recording) return;
     if (!Recorder.supported()) throw new Error('Gravação não suportada neste navegador (MediaRecorder/captureStream).');
 
@@ -77,14 +83,30 @@ export class Recorder {
 
     const stream = canvas.captureStream(fps);
     this.audioTap = this.audioContext.createMediaStreamDestination();
-    this.audioOutput.connect(this.audioTap);
+    this.exportGain = this.audioContext.createGain();
+    this.exportGain.gain.value = gain;
+    // Limitador: o ganho de correção não pode estourar nos picos.
+    const limiter = this.audioContext.createDynamicsCompressor();
+    limiter.threshold.value = -2;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.002;
+    limiter.release.value = 0.1;
+    this.audioOutput.connect(this.exportGain).connect(limiter).connect(this.audioTap);
     for (const track of this.audioTap.stream.getAudioTracks()) stream.addTrack(track);
 
-    this.loudnessAnalyser = this.audioContext.createAnalyser();
-    this.loudnessAnalyser.fftSize = 2048;
-    this.audioOutput.connect(this.loudnessAnalyser);
-    this.loudnessMeter = new LoudnessMeter(this.audioContext.sampleRate);
-    this.loudnessBuffer = new Float32Array(this.loudnessAnalyser.fftSize);
+    // Mede depois do limitador, canal a canal: o mesmo sinal que vai para o arquivo.
+    const splitter = this.audioContext.createChannelSplitter(2);
+    limiter.connect(splitter);
+    this.loudnessAnalysers = [0, 1].map((channel) => {
+      const analyser = this.audioContext.createAnalyser();
+      analyser.fftSize = LOUDNESS_WINDOW;
+      splitter.connect(analyser, channel);
+      return analyser;
+    });
+    this.loudnessMeter = new LoudnessMeter(this.audioContext.sampleRate, 2);
+    this.loudnessBuffers = this.loudnessAnalysers.map(() => new Float32Array(LOUDNESS_WINDOW));
+    this.measuredUntil = this.audioContext.currentTime;
     this.measuredLUFS = null;
 
     const mimeType = MIME_CANDIDATES.find((m) => MediaRecorder.isTypeSupported(m)) ?? '';
@@ -115,26 +137,27 @@ export class Recorder {
     this.drawTitleCard(overlay.titleCard);
     this.drawDialogues(visibleDialogues(overlay.dialogues, overlay.subtitles), overlay);
     if (overlay.watermark) drawWatermark(ctx, composite.width, composite.height, overlay.watermark);
-    if (this.loudnessAnalyser && this.loudnessMeter && this.loudnessBuffer) {
-      this.loudnessAnalyser.getFloatTimeDomainData(this.loudnessBuffer);
-      this.loudnessMeter.feed(this.loudnessBuffer);
-    }
+    this.measureLoudness();
+  }
+
+  /** Lê só as amostras novas desde o último quadro: sem buracos nem amostras repetidas, seja qual for o fps. */
+  private measureLoudness(): void {
+    if (!this.loudnessMeter) return;
+    const now = this.audioContext.currentTime;
+    const fresh = Math.min(LOUDNESS_WINDOW, Math.round((now - this.measuredUntil) * this.audioContext.sampleRate));
+    if (fresh <= 0) return;
+    this.measuredUntil = now;
+    this.loudnessAnalysers.forEach((analyser, i) => analyser.getFloatTimeDomainData(this.loudnessBuffers[i]));
+    this.loudnessMeter.feed(...this.loudnessBuffers.map((b) => b.subarray(LOUDNESS_WINDOW - fresh)));
   }
 
   async stop(): Promise<Blob | null> {
     if (!this.recorder || !this.stopped) return null;
     if (this.recorder.state !== 'inactive') this.recorder.stop();
     const blob = await this.stopped;
-    if (this.audioTap) {
+    if (this.exportGain) {
       try {
-        this.audioOutput.disconnect(this.audioTap);
-      } catch {
-        /* já desconectado */
-      }
-    }
-    if (this.loudnessAnalyser) {
-      try {
-        this.audioOutput.disconnect(this.loudnessAnalyser);
+        this.audioOutput.disconnect(this.exportGain);
       } catch {
         /* já desconectado */
       }
@@ -145,9 +168,10 @@ export class Recorder {
     this.audioTap = null;
     this.composite = null;
     this.ctx = null;
-    this.loudnessAnalyser = null;
+    this.exportGain = null;
+    this.loudnessAnalysers = [];
     this.loudnessMeter = null;
-    this.loudnessBuffer = null;
+    this.loudnessBuffers = [];
     return blob;
   }
 

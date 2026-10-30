@@ -12,6 +12,7 @@ import type { ActiveDialogue, ActorObjectDef, FrameState, StoryScript } from './
 import { CameraDirector } from './systems/CameraDirector';
 import { AudioLipsync } from './systems/AudioLipsync';
 import { PostProcessing } from './systems/PostProcessing';
+import { LOUDNESS_TARGET, makeupGain } from './systems/Loudness';
 import { Recorder } from './systems/Recorder';
 import { ControlPanel } from './ui/ControlPanel';
 import { TimelineEditor } from './ui/TimelineEditor';
@@ -332,6 +333,9 @@ let exportRestore: { rate: number; loop: boolean } | null = null;
  * Toca a história do início ao fim gravando o canvas + áudio; baixa o vídeo no final.
  * Com meta.aspect, renderiza em 1080p no formato escolhido, seja qual for a janela.
  */
+/** A passagem atual já é a corrigida: não mede de novo para refazer. */
+let exportNormalized = false;
+
 async function exportVideo(): Promise<void> {
   if (recorder.recording || !project) return;
   if (!Recorder.supported()) {
@@ -355,16 +359,34 @@ async function exportVideo(): Promise<void> {
     // Pixels PS1 do mesmo tamanho relativo que na tela.
     post.setPixelScale(size.height / Math.max(1, shown));
   }
+  exportNormalized = false;
   recorder.start(30);
   timeline.play();
   panel.setStatus(null);
   exportOverlay.show();
 }
 
+/**
+ * O MediaRecorder grava em tempo real e o áudio não dá para corrigir depois, então a primeira
+ * passagem serve de medição: se ficou longe do alvo, a história toca de novo com o ganho certo.
+ */
+function restartExportWithGain(gain: number): void {
+  exportNormalized = true;
+  timeline.seek(0);
+  recorder.start(30, gain);
+  timeline.play();
+  exportOverlay.show('⬇ Ajustando o volume (2ª passagem)…');
+}
+
 async function finishExport(save: boolean): Promise<void> {
   if (!recorder.recording) return;
   timeline.pause();
   const blob = await recorder.stop();
+  const gain = save && !exportNormalized ? makeupGain(recorder.measuredLUFS) : null;
+  if (gain !== null) {
+    restartExportWithGain(gain);
+    return;
+  }
   engine.setRenderSize(null);
   post.setPixelScale(1);
   exportOverlay.hide();
@@ -378,7 +400,7 @@ async function finishExport(save: boolean): Promise<void> {
   else if (blob && blob.size > 0) {
     Recorder.download(blob, project?.script.meta.title ?? 'polytale');
     const lufs = recorder.measuredLUFS;
-    const loudness = lufs !== null && Number.isFinite(lufs) ? ` · ≈${lufs.toFixed(1)} LUFS (alvo: -14)` : '';
+    const loudness = lufs !== null && Number.isFinite(lufs) ? ` · ≈${lufs.toFixed(1)} LUFS (alvo: ${LOUDNESS_TARGET})` : '';
     panel.setStatus(`Vídeo baixado (${(blob.size / 1024 / 1024).toFixed(1)} MB${loudness}).`);
   } else panel.setStatus('Não foi possível gerar o vídeo.', 'error');
 }
@@ -424,9 +446,13 @@ engine.onUpdate((dt, elapsed) => {
   tracks.setPlayhead(pf.chapter.index, frame.time);
 });
 
-engine.onResize((w, h) => post.setSize(w, h));
+engine.onResize((w, h) => {
+  post.setSize(w, h);
+  sceneManager.setFrameAspect(w / h);
+});
 engine.setRenderer((dt) => {
   post.render(dt);
+  if (lastFrame) sceneManager.renderScreenFeeds(engine.renderer, director, lastFrame.time);
   // Copiado logo após o render (antes do navegador limpar o buffer WebGL).
   recorder.captureFrame({ ...overlay, subtitles, watermark, speaker, anchor: speakerAnchor });
 });

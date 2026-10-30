@@ -71,6 +71,18 @@ export class CameraDirector {
     this.camera.updateProjectionMatrix();
   }
 
+  /** Coloca `camera` no plano customizado `id` (telas com câmera ao vivo). false se o plano não existir. */
+  poseShot(id: string, time: number, camera: THREE.PerspectiveCamera): boolean {
+    if (!this.shots.has(id)) return false;
+    const pose = this.resolveSpec({ shot: id }, 0, time);
+    camera.position.copy(pose.position);
+    camera.quaternion.copy(pose.quaternion);
+    camera.fov = pose.fov;
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld();
+    return true;
+  }
+
   /** Aplica o plano/mistura do quadro + tremores. */
   apply(frame: FrameState): void {
     const pose = this.resolve(frame.camera, frame.time);
@@ -304,14 +316,16 @@ export class CameraDirector {
     return candidate(angles[0]);
   }
 
-  /** Plano geral: enquadra todos os atores visíveis (ou o sujeito). */
   /**
    * Plano de inserção (B-roll): enquadra um ponto/objeto de perto, levemente de cima.
-   * Props não têm "frente", então a câmera vem do lado onde a câmera atual já está —
-   * assim o corte não "pula a linha".
+   * Props não têm "frente", então a câmera vem do lado dos atores — como o lado de quem
+   * olha para o objeto. Só depende das posições: não usa a câmera atual, ou o plano
+   * giraria quadro a quadro em torno do objeto e o seek deixaria de ser reversível.
    */
   private insert(point: THREE.Vector3, dist: number, sideSign: number): { position: THREE.Vector3; target: THREE.Vector3; fov: number } {
-    const dir = this.tmpB.subVectors(this.cameraPos, point).setY(0);
+    const dir = this.tmpB.set(0, 0, 0);
+    for (const a of this.actors.visibleActors()) dir.add(this.tmpA.subVectors(a.root.position, point));
+    dir.setY(0);
     if (dir.lengthSq() < 1e-4) dir.set(0, 0, 1);
     dir.normalize();
     const right = this.tmpC.crossVectors(UP, dir).normalize();
@@ -323,6 +337,7 @@ export class CameraDirector {
     return { position, target: point.clone(), fov: 40 };
   }
 
+  /** Plano geral: enquadra todos os atores visíveis (ou o sujeito). */
   private wide(spec: CameraShotSpec): { position: THREE.Vector3; target: THREE.Vector3; fov: number } {
     const subject = spec.subject ? this.actors.getActor(spec.subject) : undefined;
     const group = subject ? [subject] : this.actors.visibleActors();

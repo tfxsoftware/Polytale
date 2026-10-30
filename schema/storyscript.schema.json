@@ -154,11 +154,15 @@
       "properties": {
         "maxShotSeconds": {
           "type": "number",
-          "description": "Divide falas mais longas que isto (s) com um corte de reação no meio. Padrão 4."
+          "description": "Nenhum plano passa disto (s): falas longas ganham cortes nas fronteiras de palavra. Padrão 4."
         },
         "wideEvery": {
           "type": "number",
           "description": "A cada quantas falas um plano geral reestabelece a cena. 0 = nunca. Padrão 4."
+        },
+        "drift": {
+          "type": "boolean",
+          "description": "Deriva lenta (`drift`) em cada plano gerado, determinística por corte. Padrão true."
         }
       },
       "additionalProperties": false,
@@ -242,6 +246,10 @@
       "properties": {
         "background": {
           "type": "string"
+        },
+        "backdrop": {
+          "type": "string",
+          "description": "URL de uma imagem que preenche o quadro atrás de tudo (cenário pintado). Não combina com `sky`/`timeOfDay`."
         },
         "sky": {
           "$ref": "#/definitions/SkyDef"
@@ -497,6 +505,10 @@
         "src": {
           "type": "string"
         },
+        "camera": {
+          "type": "string",
+          "description": "Id de um plano em `cameras`: câmera ao vivo. Tem prioridade sobre `src`."
+        },
         "width": {
           "type": "number",
           "description": "Metros. Padrão 1.6 × 0.9 (16:9)."
@@ -510,13 +522,14 @@
         },
         "effect": {
           "$ref": "#/definitions/ScreenEffect"
+        },
+        "bezel": {
+          "type": "boolean",
+          "description": "false = plano 2D sem moldura (camada de cenário pintado); a transparência da imagem vira recorte. Padrão true."
         }
       },
-      "required": [
-        "src"
-      ],
       "additionalProperties": false,
-      "description": "Apenas para prop = 'screen'. Tela/monitor que mostra uma imagem ou vídeo (detectado pela extensão: .mp4/.webm/.ogg tocam como vídeo, o resto como imagem estática). Limitação: vídeo toca em loop por conta própria, fora do controle do relógio da história (como a voz nativa do navegador) — não é capturado pela exportação nem reversível no seek."
+      "description": "Apenas para prop = 'screen'. Tela/monitor que mostra uma imagem ou vídeo (`src`, detectado pela extensão: .mp4/.webm/.ogg tocam como vídeo, o resto como imagem estática) ou o que um plano de `cameras` está vendo (`camera`, renderizado em baixa resolução; reversível no seek e exportado). Limitação: vídeo toca em loop por conta própria, fora do controle do relógio da história (como a voz nativa do navegador) — não é capturado pela exportação nem reversível no seek."
     },
     "ScreenEffect": {
       "type": "string",

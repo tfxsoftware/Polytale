@@ -215,19 +215,27 @@ export const SCREEN_EFFECTS = ['lcd', 'dots', 'crt'] as const;
 export type ScreenEffect = (typeof SCREEN_EFFECTS)[number];
 
 /**
- * Apenas para prop = 'screen'. Tela/monitor que mostra uma imagem ou vídeo (detectado pela
- * extensão: .mp4/.webm/.ogg tocam como vídeo, o resto como imagem estática).
+ * Apenas para prop = 'screen'. Tela/monitor que mostra uma imagem ou vídeo (`src`, detectado pela
+ * extensão: .mp4/.webm/.ogg tocam como vídeo, o resto como imagem estática) ou o que um plano de
+ * `cameras` está vendo (`camera`, renderizado em baixa resolução; reversível no seek e exportado).
  * Limitação: vídeo toca em loop por conta própria, fora do controle do relógio da história
  * (como a voz nativa do navegador) — não é capturado pela exportação nem reversível no seek.
  */
 export interface ScreenDef {
-  src: string;
+  src?: string;
+  /** Id de um plano em `cameras`: câmera ao vivo. Tem prioridade sobre `src`. */
+  camera?: string;
   /** Metros. Padrão 1.6 × 0.9 (16:9). */
   width?: number;
   height?: number;
   /** Só para vídeo. Padrão true. */
   loop?: boolean;
   effect?: ScreenEffect;
+  /**
+   * false = plano 2D sem moldura (camada de cenário pintado); a transparência da imagem
+   * vira recorte. Padrão true.
+   */
+  bezel?: boolean;
 }
 
 export interface PropDef {
@@ -274,6 +282,8 @@ export interface RoomDef {
 
 export interface SceneDef {
   background?: string;
+  /** URL de uma imagem que preenche o quadro atrás de tudo (cenário pintado). Não combina com `sky`/`timeOfDay`. */
+  backdrop?: string;
   sky?: SkyDef;
   fog?: FogDef;
   ground?: GroundDef;
@@ -790,10 +800,12 @@ export interface WatermarkDef {
  * explícitos no roteiro sempre têm prioridade (nenhum corte é gerado perto deles). `true` usa os padrões.
  */
 export interface AutoCameraDef {
-  /** Divide falas mais longas que isto (s) com um corte de reação no meio. Padrão 4. */
+  /** Nenhum plano passa disto (s): falas longas ganham cortes nas fronteiras de palavra. Padrão 4. */
   maxShotSeconds?: number;
   /** A cada quantas falas um plano geral reestabelece a cena. 0 = nunca. Padrão 4. */
   wideEvery?: number;
+  /** Deriva lenta (`drift`) em cada plano gerado, determinística por corte. Padrão true. */
+  drift?: boolean;
 }
 
 export interface StoryMeta {

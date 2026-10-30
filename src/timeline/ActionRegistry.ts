@@ -98,6 +98,9 @@ export class ActionRegistry {
           }
         }
         if (raw.scene.props !== undefined && !Array.isArray(raw.scene.props)) errs.push(`'scene.props' deve ser um array`);
+        if (raw.scene.backdrop !== undefined && (raw.scene.sky !== undefined || raw.scene.timeOfDay !== undefined)) {
+          errs.push(`'scene.backdrop' não combina com 'sky' nem 'timeOfDay' (eles cobririam a imagem)`);
+        }
       }
     }
     if (raw.cameras !== undefined) {

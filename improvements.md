@@ -4,6 +4,12 @@ Gaps found by comparing Polytale's output with a reference video (vertical 9:16,
 character talking to pixel-art "gremlins"). Only items that fit the current architecture are listed,
 roughly in order of impact vs. effort.
 
+**Status:** every item is in, but these parts are still open:
+
+- 8: `outfitTexture` isn't implemented (`faceTexture` is).
+- 6: `screen` video plays on its own clock, so it doesn't follow seeking or sync in exports (images
+  and `camera` feeds do). Screen effects are texture overlays, not shaders.
+
 ## 1. Word-group captions
 
 The reference reveals whole words (`Are` → `Are you` → `Are you guys`) in groups of 1–4 words, then

@@ -1,10 +1,29 @@
 /**
- * Medidor de loudness integrado — aproximação do ITU-R BS.1770 (pré-filtro
- * K-weighting em dois estágios + RMS), sem o "gating" em blocos de 400 ms do
- * padrão completo. Serve para orientar o nível do vídeo exportado (alvo de
- * referência: -14 LUFS, o mesmo usado por Spotify/YouTube/Instagram), não
- * como medição certificada.
+ * Medidor de loudness integrado no estilo do ITU-R BS.1770: K-weighting em dois
+ * estágios, energia somada entre os canais e gating em blocos de 400 ms (silêncio
+ * não puxa a medida para baixo). Serve para levar o vídeo exportado ao alvo de
+ * -14 LUFS, o mesmo usado por Spotify/YouTube/Instagram; não é medição certificada.
  */
+
+export const LOUDNESS_TARGET = -14;
+/** Dentro desta distância do alvo (LU) o vídeo já está bom: não vale refazer a gravação. */
+const LOUDNESS_TOLERANCE = 1;
+/** Limita o ganho de correção: mais que isso só evidenciaria ruído. */
+const MAX_MAKEUP_DB = 18;
+const ABSOLUTE_GATE = -70;
+const RELATIVE_GATE = 10;
+/** Um bloco de 400 ms são quatro passos de 100 ms (sobreposição de 75%). */
+const STEPS_PER_BLOCK = 4;
+
+const blockLoudness = (meanSquare: number) => -0.691 + 10 * Math.log10(meanSquare);
+
+/** Ganho linear que leva `lufs` ao alvo; null se já está perto ou se não há o que corrigir (silêncio). */
+export function makeupGain(lufs: number | null): number | null {
+  if (lufs === null || !Number.isFinite(lufs) || lufs < ABSOLUTE_GATE) return null;
+  const delta = LOUDNESS_TARGET - lufs;
+  if (Math.abs(delta) <= LOUDNESS_TOLERANCE) return null;
+  return 10 ** (Math.min(delta, MAX_MAKEUP_DB) / 20);
+}
 
 /** Biquad direto (Direct Form I), coeficientes já normalizados por a0. */
 class Biquad {
@@ -57,31 +76,54 @@ class Biquad {
 }
 
 export class LoudnessMeter {
-  private readonly stage1 = new Biquad();
-  private readonly stage2 = new Biquad();
-  private sumSquares = 0;
-  private count = 0;
+  private readonly filters: { stage1: Biquad; stage2: Biquad }[] = [];
+  private readonly stepLength: number;
+  /** Energia média de cada passo de 100 ms completo. */
+  private readonly steps: number[] = [];
+  private stepEnergy = 0;
+  private stepCount = 0;
 
-  constructor(sampleRate: number) {
-    // Parâmetros de referência do BS.1770 (pivot ~1681.97 Hz, +4 dB; passa-altas ~38.14 Hz, Q~0.5003).
-    this.stage1.highShelf(1681.9744509555319, 3.999843853973347, 1, sampleRate);
-    this.stage2.highPass(38.13547087602444, 0.5003270373238773, sampleRate);
-  }
-
-  /** Alimenta um bloco de amostras mono (-1..1). */
-  feed(samples: Float32Array): void {
-    for (let i = 0; i < samples.length; i++) {
-      const s = this.stage2.process(this.stage1.process(samples[i]));
-      this.sumSquares += s * s;
-      this.count++;
+  constructor(sampleRate: number, channels = 1) {
+    this.stepLength = Math.round(sampleRate / 10);
+    for (let c = 0; c < channels; c++) {
+      const stage1 = new Biquad();
+      const stage2 = new Biquad();
+      // Parâmetros de referência do BS.1770 (pivot ~1681.97 Hz, +4 dB; passa-altas ~38.14 Hz, Q~0.5003).
+      stage1.highShelf(1681.9744509555319, 3.999843853973347, 1, sampleRate);
+      stage2.highPass(38.13547087602444, 0.5003270373238773, sampleRate);
+      this.filters.push({ stage1, stage2 });
     }
   }
 
-  /** LUFS integrado aproximado (sem gating). `null` se nada foi medido. */
+  /** Alimenta um bloco de amostras (-1..1), um array por canal, todos do mesmo tamanho. */
+  feed(...channels: Float32Array[]): void {
+    const length = channels[0]?.length ?? 0;
+    for (let i = 0; i < length; i++) {
+      for (let c = 0; c < channels.length; c++) {
+        const { stage1, stage2 } = this.filters[c];
+        const s = stage2.process(stage1.process(channels[c][i]));
+        this.stepEnergy += s * s;
+      }
+      if (++this.stepCount === this.stepLength) {
+        this.steps.push(this.stepEnergy / this.stepCount);
+        this.stepEnergy = 0;
+        this.stepCount = 0;
+      }
+    }
+  }
+
+  /** LUFS integrado. `null` se nada foi medido ou se é curto demais para um bloco; -Infinity se tudo ficou abaixo do gate. */
   get integrated(): number | null {
-    if (this.count === 0) return null;
-    const meanSquare = this.sumSquares / this.count;
-    if (meanSquare <= 0) return -Infinity;
-    return -0.691 + 10 * Math.log10(meanSquare);
+    if (this.steps.length < STEPS_PER_BLOCK) return null;
+    const blocks: number[] = [];
+    for (let i = 0; i + STEPS_PER_BLOCK <= this.steps.length; i++) {
+      const block = this.steps.slice(i, i + STEPS_PER_BLOCK).reduce((s, v) => s + v, 0) / STEPS_PER_BLOCK;
+      if (block > 0 && blockLoudness(block) > ABSOLUTE_GATE) blocks.push(block);
+    }
+    if (!blocks.length) return -Infinity;
+    const mean = (list: number[]) => list.reduce((s, v) => s + v, 0) / list.length;
+    const threshold = blockLoudness(mean(blocks)) - RELATIVE_GATE;
+    const kept = blocks.filter((b) => blockLoudness(b) > threshold);
+    return blockLoudness(mean(kept));
   }
 }

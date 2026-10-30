@@ -22,24 +22,28 @@ voices and sounds can all be procedural.
   `pickUp`, `push`...).
 - **Character variety**: body builds, head shapes (egg, bulb, cone, can...), hair styles, outfits (robe, dress) and accessories (hats, glasses,
   beard, scarf, backpack, a cape that sways as they walk). A `palette.faceTexture` image can paint
-  brows/stubble/detail onto a procedural face without a full GLTF model.
+  brows/stubble/detail onto a procedural face without a full GLTF model, and `headShape: "screen"`
+  makes a robot whose glowing face reacts to expressions and speech.
 - **Chapters**: multi-scene stories with their own sets, fade transitions, title cards and a shared
   `cast`.
 - **Sets**: outdoor scenes with an automatic day/night cycle (sky, sun/moon, stars) or interiors built
   from a `room` (walls you can see through from outside, doors, windows) plus furniture, and
-  deterministic `particles` props (steam, smoke, dust, sparks).
+  deterministic `particles` props (steam, smoke, dust, sparks). `screen` props show images, video or
+  a live feed from any camera shot, and spot lights can project `cookie` patterns (blinds, window,
+  leaves). `scene.backdrop` and frameless screens add painted 2D layers.
 - **Lip-synced dialogue**: a 512-bin `AnalyserNode` drives `jawOpen` from RMS energy and `mouthWide`/
   `mouthPucker` (visemes) from the spectral balance, a procedural 90s-game "babble" voice with its own
   text-driven visemes, a `speechSynthesis` fallback, and RPG-style subtitles.
 - **Camera direction**: presets (`wide`, `medium`, `close_up`, `over_shoulder`, `two_shot`,
   `low_angle`) that track actors and avoid occlusion, lerp/slerp transitions, continuous
   dolly-in/pan `drift`, camera shake with exponential decay, and an opt-in `meta.autoCamera` pass that
-  generates coverage (speaker/reaction/wide cuts) from the dialogue — explicit camera events always win.
+  generates coverage (speaker/reaction/wide cuts on word boundaries, each with a slow drift, plus prop
+  inserts via `cutaway`) from the dialogue — explicit camera events always win.
 - **PS1 visuals**: a GLSL shader with downscaling, 4x4 Bayer dithering, 15-bit color, scanlines and
   CRT curvature, plus *vertex snapping* (the PlayStation vertex wobble) and a color grade (`fx.grade`:
-  warm, cool, noir) independent of the retro look.
+  warm, cool, noir), depth of field (`fx.dof`) and bloom (`fx.bloom`) independent of the retro look.
 - **Audio mixing**: a `music` sound bus that automatically ducks under dialogue, and an approximate
-  integrated-loudness (LUFS) reading reported after each export.
+  automatic -14 LUFS loudness correction on export.
 - **Built-in editors**: a JSON editor (open/save files, copy a shareable link) and a visual
   track editor with draggable events and a per-event inspector.
 - **Video export**: one click records the whole story to `.mp4` (falling back to `.webm` if the browser
@@ -206,10 +210,13 @@ Audio files, procedural sounds and `babble` voices are recorded as-is. `speech` 
 is generated they are swapped for a `babble` voice stretched to the same line length.
 
 A `PLAY_SOUND` with `bus: "music"` ducks automatically (-8 dB) while any dialogue is speaking, and
-comes back up once it's quiet — no manual mixing needed for a constant music/ambience bed. The status
-message after a download includes an approximate integrated loudness reading (e.g. `≈-15.2 LUFS`,
-measured with a simplified BS.1770 K-weighting filter, ungated) against the -14 LUFS reference most
-platforms normalize to — a rough guide for whether the mix is loud enough, not a certified measurement.
+comes back up once it's quiet — no manual mixing needed for a constant music/ambience bed.
+
+Exports target -14 LUFS, the level most platforms normalize to. The first pass measures the mix (BS.1770
+style K-weighting with gating); if it's more than 1 LU off, the story plays a second time with makeup
+gain and a limiter, so an export can take up to twice the story's length. The status message after a
+download shows the final reading (e.g. `≈-14.2 LUFS`). The correction only touches the file, not your
+speakers.
 
 ---
 

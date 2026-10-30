@@ -199,6 +199,65 @@ describe('cobertura automática de câmera (meta.autoCamera)', () => {
     expect(mid.subject).toBe('b');
   });
 
+  /** Instantes em que o plano muda, entre `from` e `to`. */
+  function cutsBetween(project: CompiledProject, from: number, to: number): number[] {
+    const cuts: number[] = [];
+    let last = JSON.stringify(cameraAt(project, from));
+    for (let t = from; t <= to; t += 0.01) {
+      const now = JSON.stringify(cameraAt(project, t));
+      if (now !== last) cuts.push(Number(t.toFixed(2)));
+      last = now;
+    }
+    return cuts;
+  }
+
+  const longLine = (autoCamera: unknown, cast: Record<string, unknown>, text: string, duration: number) => ({
+    meta: { title: 'x', autoCamera },
+    cast,
+    timeline: [
+      ...Object.keys(cast).map((target, i) => ({ time: 0, type: 'SPAWN_OBJECT', target, position: [i * 2 - 1, 0, 0] })),
+      { time: 1, type: 'PLAY_AUDIO_WITH_LIPSYNC', target: 'a', text, duration },
+    ],
+  });
+  const dozen = 'palavra '.repeat(24).trim();
+
+  it('nenhum plano gerado passa de maxShotSeconds, mesmo em fala muito longa', () => {
+    const script = longLine(true, { a: { kind: 'actor', name: 'A' }, b: { kind: 'actor', name: 'B' } }, dozen, 12);
+    const project = compileProject(registry, script);
+    const cuts = cutsBetween(project, 1, 13);
+    const edges = [1, ...cuts, 13];
+    expect(cuts.length).toBeGreaterThanOrEqual(2);
+    for (let i = 1; i < edges.length; i++) expect(edges[i] - edges[i - 1]).toBeLessThanOrEqual(4.05);
+    // Alterna: reação de quem escuta, depois volta para quem fala.
+    expect(cameraAt(project, cuts[0] + 0.1).subject).toBe('b');
+    expect(cameraAt(project, cuts[1] + 0.1).subject).toBe('a');
+  });
+
+  it('corta nas fronteiras de palavra', () => {
+    const script = longLine(true, { a: { kind: 'actor', name: 'A' }, b: { kind: 'actor', name: 'B' } }, dozen, 12);
+    const cuts = cutsBetween(compileProject(registry, script), 1, 13);
+    // 24 palavras iguais em 12 s: uma fronteira a cada 0,5 s.
+    for (const t of cuts) expect(Math.abs((t - 1) / 0.5 - Math.round((t - 1) / 0.5))).toBeLessThan(0.05);
+  });
+
+  it('sem ouvinte, alterna enquadramentos de quem fala', () => {
+    const script = longLine(true, { a: { kind: 'actor', name: 'A' } }, dozen, 9);
+    const project = compileProject(registry, script);
+    const [cut] = cutsBetween(project, 1, 10);
+    expect(cameraAt(project, cut + 0.1)).toMatchObject({ preset: 'medium', subject: 'a' });
+  });
+
+  it('cada plano gerado tem deriva própria, igual a cada compilação', () => {
+    const cast = { a: { kind: 'actor', name: 'A' }, b: { kind: 'actor', name: 'B' } };
+    const project = compileProject(registry, longLine(true, cast, dozen, 12));
+    const first = cameraAt(project, 1.5).drift;
+    const second = cameraAt(project, 6).drift;
+    expect(first?.push).toBeGreaterThan(0);
+    expect(first).not.toEqual(second);
+    expect(cameraAt(compileProject(registry, longLine(true, cast, dozen, 12)), 1.5).drift).toEqual(first);
+    expect(cameraAt(compileProject(registry, longLine({ drift: false }, cast, dozen, 12)), 1.5).drift).toBeUndefined();
+  });
+
   it('plano geral a cada N falas (wideEvery)', () => {
     const script = {
       meta: { title: 'x', autoCamera: { wideEvery: 2 } },

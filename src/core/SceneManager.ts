@@ -17,7 +17,7 @@ import type {
 } from '../timeline/types';
 import { isVideoSrc } from '../timeline/types';
 import type { AssetLoader } from './AssetLoader';
-import type { ActorProvider } from '../systems/CameraDirector';
+import type { ActorProvider, CameraDirector } from '../systems/CameraDirector';
 import type { LipsyncState } from '../systems/AudioLipsync';
 import { applyPS1VertexSnap } from '../systems/PostProcessing';
 import { Actor } from './Actor';
@@ -148,6 +148,17 @@ function cookieTexture(cookie: string, assets: AssetLoader): THREE.Texture | nul
 /*  Telas (prop 'screen')                                                    */
 /* ========================================================================== */
 
+/** Linhas da imagem de uma tela com câmera ao vivo: baixa para custar pouco e combinar com o estilo. */
+const SCREEN_FEED_HEIGHT = 180;
+
+interface ScreenFeed {
+  shot: string;
+  object: THREE.Object3D;
+  panel: THREE.Mesh;
+  camera: THREE.PerspectiveCamera;
+  target: THREE.WebGLRenderTarget;
+}
+
 const screenEffectCache = new Map<ScreenEffect, THREE.Texture>();
 
 /** Grade LCD fina (subpixels). */
@@ -259,6 +270,11 @@ export class SceneManager implements ActorProvider {
   private readonly frameAnimated: Animated[] = [];
   /** Vídeos de tela (prop 'screen'): tocam por conta própria, fora do relógio da história. */
   private readonly screenVideos: HTMLVideoElement[] = [];
+  /** Telas com câmera ao vivo: função pura do quadro, então entram no seek e na exportação. */
+  private readonly screenFeeds: ScreenFeed[] = [];
+  /** Imagem de `scene.backdrop`, recortada para cobrir o quadro. */
+  private backdrop: THREE.Texture | null = null;
+  private frameAspect = 16 / 9;
   /** Tudo que é recriado a cada história. */
   private readonly world = new THREE.Group();
   private dayNight: DayNightCycle | null = null;
@@ -304,7 +320,7 @@ export class SceneManager implements ActorProvider {
   build(story: CompiledStory, assets: AssetLoader): void {
     this.clear();
     const scene = story.script.scene ?? {};
-    this.buildEnvironment(scene);
+    this.buildEnvironment(scene, assets);
     // Com ciclo dia/noite o sol e o céu são automáticos; luzes do script somam a eles.
     this.buildLights(scene.lights ?? (this.dayNight ? [] : defaultLights()), assets);
     for (const p of scene.props ?? []) {
@@ -358,16 +374,17 @@ export class SceneManager implements ActorProvider {
   private followLight<L extends THREE.Light>(light: L, owner: THREE.Object3D, offset: THREE.Vector3): L {
     light.userData.baseIntensity = light.intensity;
     this.world.add(light);
-    const isShown = (o: THREE.Object3D | null): boolean => {
-      for (let n = o; n && n !== this.world; n = n.parent) if (!n.visible) return false;
-      return true;
-    };
     this.animated.push(() => {
       owner.updateWorldMatrix(true, false);
       light.position.copy(offset).applyMatrix4(owner.matrixWorld);
-      light.intensity = isShown(owner) && owner.parent ? (light.userData.baseIntensity as number) : 0;
+      light.intensity = this.isShown(owner) && owner.parent ? (light.userData.baseIntensity as number) : 0;
     });
     return light;
+  }
+
+  private isShown(o: THREE.Object3D | null): boolean {
+    for (let n = o; n && n !== this.world; n = n.parent) if (!n.visible) return false;
+    return true;
   }
 
   clear(): void {
@@ -383,6 +400,9 @@ export class SceneManager implements ActorProvider {
       v.load();
     }
     this.screenVideos.length = 0;
+    for (const f of this.screenFeeds) f.target.dispose();
+    this.screenFeeds.length = 0;
+    this.backdrop = null;
     this.world.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (mesh.isMesh) {
@@ -404,6 +424,45 @@ export class SceneManager implements ActorProvider {
   /* ---------------------------------------------------------------------- */
   /*  Por quadro                                                            */
   /* ---------------------------------------------------------------------- */
+
+  /** Proporção do quadro de saída: `scene.backdrop` é recortado para cobri-lo sem distorcer. */
+  setFrameAspect(aspect: number): void {
+    this.frameAspect = aspect;
+    this.fitBackdrop();
+  }
+
+  private fitBackdrop(): void {
+    const image = this.backdrop?.image as { width: number; height: number } | undefined;
+    if (!this.backdrop || !image?.height) return;
+    const ratio = image.width / image.height / this.frameAspect;
+    if (ratio > 1) {
+      this.backdrop.repeat.set(1 / ratio, 1);
+      this.backdrop.offset.set((1 - 1 / ratio) / 2, 0);
+    } else {
+      this.backdrop.repeat.set(1, ratio);
+      this.backdrop.offset.set(0, (1 - ratio) / 2);
+    }
+  }
+
+  /**
+   * Renderiza as telas com câmera ao vivo. Roda depois do quadro principal: reaproveita os mapas
+   * de sombra dele, e cada tela aparece com um quadro de atraso (imperceptível).
+   */
+  renderScreenFeeds(renderer: THREE.WebGLRenderer, director: CameraDirector, time: number): void {
+    if (!this.screenFeeds.length) return;
+    const autoUpdate = renderer.shadowMap.autoUpdate;
+    renderer.shadowMap.autoUpdate = false;
+    for (const feed of this.screenFeeds) {
+      if (!this.isShown(feed.object) || !director.poseShot(feed.shot, time, feed.camera)) continue;
+      // A tela não pode amostrar a própria imagem enquanto ela é desenhada.
+      feed.panel.visible = false;
+      renderer.setRenderTarget(feed.target);
+      renderer.render(this.scene, feed.camera);
+      feed.panel.visible = true;
+    }
+    renderer.setRenderTarget(null);
+    renderer.shadowMap.autoUpdate = autoUpdate;
+  }
 
   /** Aplica o estado determinístico da timeline. */
   applyFrame(frame: FrameState): void {
@@ -570,9 +629,15 @@ export class SceneManager implements ActorProvider {
   /*  Ambiente                                                              */
   /* ---------------------------------------------------------------------- */
 
-  private buildEnvironment(def: SceneDef): void {
+  private buildEnvironment(def: SceneDef, assets: AssetLoader): void {
     const bg = new THREE.Color(def.background ?? def.fog?.color ?? '#10121c');
     this.scene.background = bg;
+    if (def.backdrop) {
+      this.backdrop = assets.getTexture(def.backdrop) ?? null;
+      if (this.backdrop) this.scene.background = this.backdrop;
+      else console.warn(`[SceneManager] backdrop '${def.backdrop}' indisponível.`);
+      this.fitBackdrop();
+    }
     if (def.fog) this.scene.fog = new THREE.Fog(def.fog.color, def.fog.near, def.fog.far);
     else if (typeof def.timeOfDay === 'number' && !def.room) this.scene.fog = new THREE.Fog('#000000', 28, 95);
 
@@ -932,11 +997,24 @@ export class SceneManager implements ActorProvider {
         const height = screenDef?.height ?? 0.9;
         const depth = Math.min(width, height) * 0.08;
 
-        const bezel = new THREE.Mesh(new THREE.BoxGeometry(width + depth, height + depth, depth).translate(0, 0, -depth / 2), lambert('#141418'));
-        g.add(bezel);
+        const framed = screenDef?.bezel ?? true;
+        if (framed) {
+          const bezel = new THREE.Mesh(new THREE.BoxGeometry(width + depth, height + depth, depth).translate(0, 0, -depth / 2), lambert('#141418'));
+          g.add(bezel);
+        }
 
         let map: THREE.Texture | null = null;
-        if (screenDef?.src) {
+        let feedTarget: THREE.WebGLRenderTarget | null = null;
+        if (screenDef?.camera) {
+          // Cor linear em HDR, como o RenderPass: o tone mapping acontece uma vez só, no OutputPass.
+          feedTarget = new THREE.WebGLRenderTarget(Math.max(1, Math.round((SCREEN_FEED_HEIGHT * width) / height)), SCREEN_FEED_HEIGHT, {
+            type: THREE.HalfFloatType,
+            magFilter: THREE.NearestFilter,
+            minFilter: THREE.NearestFilter,
+            generateMipmaps: false,
+          });
+          map = feedTarget.texture;
+        } else if (screenDef?.src) {
           if (isVideoSrc(screenDef.src)) {
             const video = document.createElement('video');
             video.src = assets.resolve(screenDef.src);
@@ -960,10 +1038,14 @@ export class SceneManager implements ActorProvider {
             if (!map) console.warn(`[SceneManager] tela: imagem '${screenDef.src}' indisponível.`);
           }
         }
-        const screenMat = new THREE.MeshBasicMaterial({ map, color: map ? '#ffffff' : '#1a1a22' });
+        const screenMat = new THREE.MeshBasicMaterial({ map, color: map ? '#ffffff' : '#1a1a22', alphaTest: framed ? 0 : 0.5 });
         const panel = new THREE.Mesh(new THREE.PlaneGeometry(width, height), screenMat);
         panel.position.z = 0.002;
         g.add(panel);
+        if (screenDef?.camera && feedTarget) {
+          const camera = new THREE.PerspectiveCamera(50, width / height, 0.05, 400);
+          this.screenFeeds.push({ shot: screenDef.camera, object: g, panel, camera, target: feedTarget });
+        }
 
         if (screenDef?.effect) {
           const overlay = new THREE.Mesh(
