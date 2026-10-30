@@ -228,10 +228,12 @@ export class CameraDirector {
         const right = this.tmpC.crossVectors(toSubject, UP).normalize();
         // A linha câmera->sujeito converge; para a cabeça de `over` ficar na borda do
         // quadro (~0.42 m da linha em 16:9), o deslocamento lateral cresce quando estão
-        // próximos. Em quadro estreito a borda fica mais perto da linha.
+        // próximos. Em quadro estreito a borda fica mais perto da linha, mas a cabeça não
+        // encolhe junto: sem a folga, ela taparia o sujeito.
         const back = 0.9;
         const narrow = this.narrowness();
-        const lateral = THREE.MathUtils.clamp((0.42 * narrow * (sep + back)) / sep, 0.5 * narrow, 1.4);
+        const clearance = 0.42 * narrow + 0.45 * (1 - narrow);
+        const lateral = THREE.MathUtils.clamp((clearance * (sep + back)) / sep, 0.5 * narrow, 1.4);
         const position = shoulder
           .clone()
           .addScaledVector(toSubject, -back)

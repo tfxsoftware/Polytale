@@ -173,6 +173,13 @@ export function buildProceduralRig(def: ActorObjectDef, assets?: AssetLoader): P
   const mSkin = lambert(skin);
   const mHair = lambert(p.hair ?? '#3b2a1a');
   const mShirt = lambert(p.shirt ?? '#3f6fb5');
+  const outfitTexture = assets?.getTexture(p.outfitTexture);
+  if (outfitTexture) {
+    outfitTexture.wrapS = outfitTexture.wrapT = THREE.RepeatWrapping;
+    outfitTexture.needsUpdate = true;
+    mShirt.map = outfitTexture;
+    mShirt.color.set('#ffffff');
+  }
   const mPants = lambert(p.pants ?? '#2d2d3a');
   const mShoes = lambert(p.shoes ?? '#1c1410');
   const accentColor = p.accent ?? '#8a2b2b';

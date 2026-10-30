@@ -42,11 +42,12 @@ export class AssetLoader {
     const textures = new Set<string>();
     const addObject = (o: unknown) => {
       const def = o as
-        | { kind?: string; model?: string; prop?: string; palette?: { faceTexture?: string }; screen?: { src?: string } }
+        | { kind?: string; model?: string; prop?: string; palette?: { faceTexture?: string; outfitTexture?: string }; screen?: { src?: string } }
         | undefined;
       if (!def || typeof def !== 'object') return;
       if (def.model && (def.kind === 'actor' || def.prop === 'model')) models.add(def.model);
       if (def.kind === 'actor' && def.palette?.faceTexture) textures.add(def.palette.faceTexture);
+      if (def.kind === 'actor' && def.palette?.outfitTexture) textures.add(def.palette.outfitTexture);
       if (def.prop === 'screen' && def.screen?.src && !isVideoSrc(def.screen.src)) textures.add(def.screen.src);
     };
     const scenes = [script.scene, ...(script.chapters ?? []).map((c) => c?.scene)];

@@ -427,6 +427,7 @@ engine.onUpdate((dt, elapsed) => {
 
   // 2. Timeline -> objetos/luzes/céu.
   sceneManager.applyFrame(frame);
+  sceneManager.syncScreenVideos(frame.time, timeline.playing, timeline.rate);
 
   // 3. Áudio alinhado à timeline + análise FFT/RMS.
   audio.sync(frame, timeline.playing, timeline.rate, timeline.discontinuity);

@@ -87,7 +87,7 @@ export class Recorder {
     this.exportGain.gain.value = gain;
     // Limitador: o ganho de correção não pode estourar nos picos.
     const limiter = this.audioContext.createDynamicsCompressor();
-    limiter.threshold.value = -2;
+    limiter.threshold.value = -3;
     limiter.knee.value = 0;
     limiter.ratio.value = 20;
     limiter.attack.value = 0.002;

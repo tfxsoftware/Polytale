@@ -113,9 +113,10 @@ preset.
 
 - `camera`: id de um plano em `cameras[]`; a tela mostra ao vivo o que esse plano vê (câmera de segurança, TV
   transmitindo a cena). Funciona no seek e na exportação. Não use mais que 2–3 por cena: cada uma redesenha a cena.
-- `src`: imagem ou vídeo (`.mp4`, `.webm`, `.ogg`). **Vídeo não sincroniza na exportação** e não acompanha o seek;
-  prefira imagem ou `camera`. `loop` (padrão `true`) só vale para vídeo.
-- `width`, `height` em metros (padrão 1,6 × 0,9); `effect`: `lcd`, `dots` (LED) ou `crt`.
+- `src`: imagem ou vídeo (`.mp4`, `.webm`, `.ogg`). O vídeo segue o tempo da história desde 0, mesmo que a tela surja
+  depois. `loop` (padrão `true`) só vale para vídeo.
+- `width`, `height` em metros (padrão 1,6 × 0,9); `effect`: `lcd` (subpixels), `dots` (painel de LED, bom em telão) ou
+  `crt` (scanlines e vinheta).
 - `bezel: false` tira a moldura: vira um plano 2D de cenário, e a transparência da imagem recorta o contorno
   (árvore pintada, sprite pixel art).
 
@@ -139,6 +140,7 @@ Campos opcionais de `object` para atores procedurais:
 | `accessories` | lista com `hat`, `wizardHat`, `cap`, `crown`, `glasses`, `beard`, `mustache`, `scarf`, `backpack`, `cape` |
 | `palette.accent` | cor de chapéu, capa, cachecol e mochila |
 | `palette.faceTexture` | URL de uma imagem (PNG com transparência) pintada sobre o rosto procedural — sobrancelhas, barba por fazer, marcas — sem precisar de um modelo GLTF. Fica atrás dos olhos/boca procedurais, que continuam animando por cima. |
+| `palette.outfitTexture` | URL de uma imagem repetida como estampa na camisa (tronco, braços e saia de `robe`/`dress`). Prefira padrões pequenos e sem emenda (xadrez, listras). |
 
 Dê a cada personagem uma silhueta própria (cabelo + acessório + cor). A capa balança sozinha ao caminhar.
 

@@ -148,6 +148,10 @@ function cookieTexture(cookie: string, assets: AssetLoader): THREE.Texture | nul
 /*  Telas (prop 'screen')                                                    */
 /* ========================================================================== */
 
+/** Distância (s) do tempo da história que faz um vídeo de tela ser reposicionado: tocando e parado. */
+const SCREEN_VIDEO_DRIFT = 0.15;
+const SCREEN_VIDEO_SEEK = 0.04;
+
 /** Linhas da imagem de uma tela com câmera ao vivo: baixa para custar pouco e combinar com o estilo. */
 const SCREEN_FEED_HEIGHT = 180;
 
@@ -159,57 +163,44 @@ interface ScreenFeed {
   target: THREE.WebGLRenderTarget;
 }
 
-const screenEffectCache = new Map<ScreenEffect, THREE.Texture>();
+/** Linhas da grade de cada efeito: fixas, para o efeito ter a mesma cara em qualquer tamanho de tela. */
+const SCREEN_EFFECT_ROWS: Record<ScreenEffect, number> = { lcd: 140, dots: 48, crt: 180 };
 
-/** Grade LCD fina (subpixels). */
-function drawLcdEffect(ctx: CanvasRenderingContext2D, s: number): void {
-  ctx.clearRect(0, 0, s, s);
-  ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  for (let y = 0; y < s; y += 4) ctx.fillRect(0, y, s, 1);
-  for (let x = 0; x < s; x += 4) ctx.fillRect(x, 0, 1, s);
-}
-
-/** Matriz de pontos (billboard de LED). */
-function drawDotsEffect(ctx: CanvasRenderingContext2D, s: number): void {
-  ctx.clearRect(0, 0, s, s);
-  ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  const cell = s / 8;
-  for (let y = 0; y < 8; y++) {
-    for (let x = 0; x < 8; x++) {
-      ctx.beginPath();
-      ctx.arc((x + 0.5) * cell, (y + 0.5) * cell, cell * 0.14, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-}
-
-/** Scanlines + vinheta sutil de tubo CRT. */
-function drawCrtEffect(ctx: CanvasRenderingContext2D, s: number): void {
-  ctx.clearRect(0, 0, s, s);
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  for (let y = 0; y < s; y += 3) ctx.fillRect(0, y, s, 1);
-  const g = ctx.createRadialGradient(s / 2, s / 2, s * 0.25, s / 2, s / 2, s * 0.7);
-  g.addColorStop(0, 'rgba(0,0,0,0)');
-  g.addColorStop(1, 'rgba(0,0,0,0.45)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, s, s);
-}
-
-const SCREEN_EFFECT_DRAWERS: Record<ScreenEffect, (ctx: CanvasRenderingContext2D, s: number) => void> = {
-  lcd: drawLcdEffect,
-  dots: drawDotsEffect,
-  crt: drawCrtEffect,
+/** GLSL de cada efeito: a UV amostrada e a máscara multiplicada sobre a cor. */
+const SCREEN_EFFECT_GLSL: Record<ScreenEffect, { uv: string; mask: string }> = {
+  // Subpixels RGB verticais, com uma linha escura entre as fileiras.
+  lcd: {
+    uv: '(floor(screenCell) + 0.5) / uScreenCells',
+    mask: 'step(0.12, fract(screenCell.y)) * (vec3(lessThan(abs(fract(screenCell.x) - vec3(0.167, 0.5, 0.833)), vec3(0.167))) * 2.2 + 0.1)',
+  },
+  // Cada célula vira um LED redondo com a cor do centro dela.
+  dots: {
+    uv: '(floor(screenCell) + 0.5) / uScreenCells',
+    mask: 'vec3((1.0 - smoothstep(0.38, 0.48, length(fract(screenCell) - 0.5))) * 1.6)',
+  },
+  // Scanlines + vinheta de tubo.
+  crt: {
+    uv: 'vMapUv',
+    mask: 'vec3((0.72 + 0.28 * sin(screenCell.y * 6.2832)) * (1.0 - 1.1 * dot(vMapUv - 0.5, vMapUv - 0.5)))',
+  },
 };
 
-function screenEffectTexture(effect: ScreenEffect): THREE.Texture {
-  let tex = screenEffectCache.get(effect);
-  if (!tex) {
-    tex = canvasTexture(64, SCREEN_EFFECT_DRAWERS[effect]);
-    tex.wrapS = tex.wrapT = effect === 'crt' ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping;
-    if (effect !== 'crt') tex.repeat.set(6, 6);
-    screenEffectCache.set(effect, tex);
-  }
-  return tex;
+/** Aplica o efeito na própria amostragem da imagem. Reaproveita o map_fragment do Three (que decodifica vídeo). */
+function applyScreenEffect(material: THREE.MeshBasicMaterial, effect: ScreenEffect, aspect: number): void {
+  const rows = SCREEN_EFFECT_ROWS[effect];
+  const cells = new THREE.Vector2(Math.max(1, Math.round(rows * aspect)), rows);
+  const { uv, mask } = SCREEN_EFFECT_GLSL[effect];
+  const code = `
+    vec2 screenCell = vMapUv * uScreenCells;
+    vec2 screenUv = ${uv};
+    ${THREE.ShaderChunk.map_fragment.replaceAll('vMapUv', 'screenUv')}
+    diffuseColor.rgb *= ${mask};
+  `;
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uScreenCells = { value: cells };
+    shader.fragmentShader = `uniform vec2 uScreenCells;\n${shader.fragmentShader.replace('#include <map_fragment>', code)}`;
+  };
+  material.customProgramCacheKey = () => `screen-${effect}`;
 }
 
 /* ========================================================================== */
@@ -268,7 +259,7 @@ export class SceneManager implements ActorProvider {
   private readonly animated: Animated[] = [];
   /** Animações puras de `frame.time` (ex.: partículas) — diferente de `animated` (tempo real), ficam reversíveis no seek. */
   private readonly frameAnimated: Animated[] = [];
-  /** Vídeos de tela (prop 'screen'): tocam por conta própria, fora do relógio da história. */
+  /** Vídeos de tela (prop 'screen'): acompanham o relógio da história em `syncScreenVideos`. */
   private readonly screenVideos: HTMLVideoElement[] = [];
   /** Telas com câmera ao vivo: função pura do quadro, então entram no seek e na exportação. */
   private readonly screenFeeds: ScreenFeed[] = [];
@@ -424,6 +415,28 @@ export class SceneManager implements ActorProvider {
   /* ---------------------------------------------------------------------- */
   /*  Por quadro                                                            */
   /* ---------------------------------------------------------------------- */
+
+  /**
+   * Mantém os vídeos de tela no tempo da história, como o áudio: tocam e pausam com a timeline e
+   * voltam ao ponto certo quando se afastam dele (seek, gravação).
+   */
+  syncScreenVideos(time: number, playing: boolean, rate: number): void {
+    for (const video of this.screenVideos) {
+      const { duration } = video;
+      if (!Number.isFinite(duration) || duration <= 0) continue;
+      const expected = video.loop ? time % duration : Math.min(time, duration);
+      if (video.playbackRate !== rate && rate > 0) video.playbackRate = rate;
+      const shouldPlay = playing && (video.loop || time < duration);
+      if (shouldPlay && video.paused) {
+        video.play().catch(() => {
+          /* autoplay pode exigir gesto do usuário; a tela fica parada até lá */
+        });
+      } else if (!shouldPlay && !video.paused) video.pause();
+      let off = Math.abs(video.currentTime - expected);
+      if (video.loop) off = Math.min(off, duration - off);
+      if (off > (shouldPlay ? SCREEN_VIDEO_DRIFT : SCREEN_VIDEO_SEEK) && !video.seeking) video.currentTime = expected;
+    }
+  }
 
   /** Proporção do quadro de saída: `scene.backdrop` é recortado para cobri-lo sem distorcer. */
   setFrameAspect(aspect: number): void {
@@ -1022,14 +1035,10 @@ export class SceneManager implements ActorProvider {
             video.muted = true;
             video.playsInline = true;
             video.crossOrigin = 'anonymous';
-            video.play().catch(() => {
-              /* autoplay pode exigir gesto do usuário; a tela fica no primeiro quadro até lá */
-            });
             this.screenVideos.push(video);
             const videoTex = new THREE.VideoTexture(video);
             videoTex.colorSpace = THREE.SRGBColorSpace;
             map = videoTex;
-            // Vídeo é tempo real (como a voz nativa do navegador): não entra no seek/na exportação.
             this.animated.push(() => {
               videoTex.needsUpdate = true;
             });
@@ -1042,18 +1051,10 @@ export class SceneManager implements ActorProvider {
         const panel = new THREE.Mesh(new THREE.PlaneGeometry(width, height), screenMat);
         panel.position.z = 0.002;
         g.add(panel);
+        if (screenDef?.effect && map) applyScreenEffect(screenMat, screenDef.effect, width / height);
         if (screenDef?.camera && feedTarget) {
           const camera = new THREE.PerspectiveCamera(50, width / height, 0.05, 400);
           this.screenFeeds.push({ shot: screenDef.camera, object: g, panel, camera, target: feedTarget });
-        }
-
-        if (screenDef?.effect) {
-          const overlay = new THREE.Mesh(
-            new THREE.PlaneGeometry(width, height),
-            new THREE.MeshBasicMaterial({ map: screenEffectTexture(screenDef.effect), transparent: true, depthWrite: false }),
-          );
-          overlay.position.z = 0.004;
-          g.add(overlay);
         }
         break;
       }

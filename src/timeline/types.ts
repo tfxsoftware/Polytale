@@ -217,9 +217,8 @@ export type ScreenEffect = (typeof SCREEN_EFFECTS)[number];
 /**
  * Apenas para prop = 'screen'. Tela/monitor que mostra uma imagem ou vídeo (`src`, detectado pela
  * extensão: .mp4/.webm/.ogg tocam como vídeo, o resto como imagem estática) ou o que um plano de
- * `cameras` está vendo (`camera`, renderizado em baixa resolução; reversível no seek e exportado).
- * Limitação: vídeo toca em loop por conta própria, fora do controle do relógio da história
- * (como a voz nativa do navegador) — não é capturado pela exportação nem reversível no seek.
+ * `cameras` está vendo (`camera`, renderizado em baixa resolução). Tudo reversível no seek e
+ * exportado; o vídeo segue o tempo da história, a partir de 0, mesmo se a tela surgir depois.
  */
 export interface ScreenDef {
   src?: string;
@@ -316,6 +315,8 @@ export interface ActorPalette {
    * completo. Fica atrás dos olhos/boca procedurais, que continuam animando.
    */
   faceTexture?: string;
+  /** URL de uma imagem repetida como estampa na camisa (tronco, braços e saia de `robe`/`dress`). */
+  outfitTexture?: string;
 }
 
 export const BODY_BUILDS = ['slim', 'average', 'athletic', 'heavy'] as const;
