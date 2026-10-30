@@ -482,6 +482,7 @@ Campos comuns a **todos** os eventos:
     `shoulderL`, `shoulderR`, `handL`, `handR`, `root`. `local: true` gira o offset junto com o alvo;
   - `{ "midpoint": [idA, idB], "height": 1.0 }` — ponto médio entre dois objetos (mãos se encontrando).
 - `duration` = tempo para estender (padrão 0,5 s). `hold` recolhe automaticamente depois de N segundos.
+- `elbow`: `[para fora, para cima, para a frente]`, para onde o cotovelo aponta (padrão `[0.35, -0.45, -0.6]`). Com a mão perto do rosto use algo como `[0.8, -0.5, 0.3]`, senão o braço atravessa o tronco.
   `shake` (0–2) balança a mão (aperto de mão).
 - O alvo é seguido em tempo real: se o alvo se move, a mão acompanha.
 

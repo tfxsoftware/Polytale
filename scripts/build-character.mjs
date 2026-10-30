@@ -1,9 +1,10 @@
 /**
  * Gera uma versão low poly de um avatar GLB e embute clipes FBX do Mixamo no mesmo arquivo.
  *
- *   node scripts/build-character.mjs [--full] [entrada.glb] [saida.glb] [Clipe.fbx ...]
+ *   node scripts/build-character.mjs [--full] [--body-texture=N] [entrada.glb] [saida.glb] [Clipe.fbx ...]
  *
  * Com --full, malha e materiais ficam intactos e só os clipes são embutidos.
+ * --body-texture troca o tamanho da textura do corpo (ex.: para uma tatuagem continuar legível).
  * Reduz a malha, descarta normais (o GLTFLoader passa a usar flat shading), troca o PBR por
  * uma única textura pequena sem filtragem e copia as trilhas dos FBX para o esqueleto do GLB.
  * Os clipes precisam vir de um esqueleto com os mesmos nomes de ossos. Requer ffmpeg no PATH.
@@ -18,12 +19,13 @@ import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 const args = process.argv.slice(2);
 const full = args.includes('--full');
 const defaultOutput = full ? 'public/models/character-full.glb' : 'public/models/character-lowpoly.glb';
-const [input = 'public/models/character.glb', output = defaultOutput, ...clipArgs] = args.filter((a) => a !== '--full');
+const [input = 'public/models/character.glb', output = defaultOutput, ...clipArgs] = args.filter((a) => !a.startsWith('--'));
+const bodyTexture = Number(args.find((a) => a.startsWith('--body-texture='))?.split('=')[1]) || 128;
 const clipFiles = clipArgs.length ? clipArgs : ['public/models/Walking.fbx', 'public/models/Talking.fbx'];
 
 /** Triângulos e tamanho da textura por malha (a do corpo guarda o rosto). */
 const TARGETS = {
-  avaturn_body: { tris: 1500, texture: 128 },
+  avaturn_body: { tris: 1500, texture: bodyTexture },
   avaturn_hair_0: { tris: 300, texture: 64 },
   avaturn_shoes_0: { tris: 300, texture: 64 },
   avaturn_look_0: { tris: 900, texture: 128 },

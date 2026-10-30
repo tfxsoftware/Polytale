@@ -550,7 +550,7 @@ export class SceneManager implements ActorProvider {
             const prev = this.resolveReachTarget(r.prev, this.tmpPrev);
             if (prev) point.lerpVectors(prev, point, r.blend);
           }
-          actor.setReach(hand, point, r.weight, r.shake);
+          actor.setReach(hand, point, r.weight, r.shake, r.elbow);
         }
       }
       actor.update(deltaTime);

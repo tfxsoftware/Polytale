@@ -381,7 +381,7 @@ function validateActorStyle(def: ActorObjectDef): string[] {
   return errs;
 }
 
-function reachTrack(id: string, hand: Hand, to: ReachTarget | null, shake: number): AnyTrack {
+function reachTrack(id: string, hand: Hand, to: ReachTarget | null, shake: number, elbow: Vec3 | null): AnyTrack {
   return track<ReachFrame>({
     channel: `actor:${id}:reach:${hand}`,
     get: (f) => f.actors[id].reach[hand],
@@ -391,9 +391,9 @@ function reachTrack(id: string, hand: Hand, to: ReachTarget | null, shake: numbe
     },
     interpolate: Interp.reach,
     resolve: (from) => {
-      if (to === null) return { target: from.target, prev: null, blend: 1, weight: 0, shake: 0 };
+      if (to === null) return { target: from.target, prev: null, blend: 1, weight: 0, shake: 0, elbow: from.elbow };
       const extended = from.weight > 0.01 && from.target !== null;
-      return { target: to, prev: extended ? from.target : null, blend: 1, weight: 1, shake };
+      return { target: to, prev: extended ? from.target : null, blend: 1, weight: 1, shake, elbow };
     },
   });
 }
@@ -752,6 +752,7 @@ export function createDefaultHandlers(): HandlerMap {
         else if (ev.to !== null) errs.push(...isReachTarget(ev.to, ctx));
         if (ev.hold !== undefined && (!isNum(ev.hold) || ev.hold < 0)) errs.push(`'hold' deve ser >= 0`);
         if (ev.shake !== undefined && (!isNum(ev.shake) || ev.shake < 0 || ev.shake > 2)) errs.push(`'shake' deve estar entre 0 e 2`);
+        if (ev.elbow !== undefined && !isVec3(ev.elbow)) errs.push(`'elbow' deve ser [x, y, z]`);
         return errs;
       },
       expand(ev) {
@@ -768,7 +769,7 @@ export function createDefaultHandlers(): HandlerMap {
       tracks(ev) {
         const hand = ev.hand ?? 'right';
         if (hand === 'both') return [];
-        return [reachTrack(ev.target, hand, ev.to, ev.shake ?? 0)];
+        return [reachTrack(ev.target, hand, ev.to, ev.shake ?? 0, ev.elbow ?? null)];
       },
     },
 

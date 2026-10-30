@@ -671,6 +671,8 @@ export interface ReachEvent extends EventBase {
   to: ReachTarget | null;
   /** Balanço vertical da mão (0..1) — ex.: aperto de mão. */
   shake?: number;
+  /** Para onde o cotovelo aponta: [para fora, para cima, para a frente]. Padrão [0.35, -0.45, -0.6]. */
+  elbow?: Vec3;
   /** Se informado, recolhe o braço automaticamente após este tempo (s). */
   hold?: number;
 }
@@ -978,6 +980,7 @@ export interface ReachFrame {
   /** 0 = braço livre (procedural), 1 = mão no alvo. */
   weight: number;
   shake: number;
+  elbow?: Vec3 | null;
 }
 
 export interface ClipState {

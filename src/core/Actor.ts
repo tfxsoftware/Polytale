@@ -12,6 +12,7 @@ import {
   type ObjectFrame,
   type PoseFrame,
   type Socket,
+  type Vec3,
 } from '../timeline/types';
 import { restPoseFrame, sampleGesture } from '../timeline/poses';
 import type { AssetLoader } from './AssetLoader';
@@ -40,6 +41,8 @@ const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();
 const _m = new THREE.Matrix4();
 const _pole = new THREE.Vector3();
+/** Cotovelo para baixo, para trás e para fora: [para fora, para cima, para a frente]. */
+const DEFAULT_ELBOW: Vec3 = [0.35, -0.45, -0.6];
 
 /**
  * Personagem: encapsula malha 3D, morph targets (rosto) e a "vida" procedural.
@@ -61,9 +64,9 @@ export class Actor {
   private gesture: { name: string; progress: number } | null = null;
   private pose: PoseFrame = restPoseFrame();
   private gestureLibrary: Readonly<Record<string, GestureDef>> = {};
-  private readonly reach: Record<Hand, { point: THREE.Vector3; weight: number; shake: number }> = {
-    left: { point: new THREE.Vector3(), weight: 0, shake: 0 },
-    right: { point: new THREE.Vector3(), weight: 0, shake: 0 },
+  private readonly reach: Record<Hand, { point: THREE.Vector3; weight: number; shake: number; elbow: Vec3 }> = {
+    left: { point: new THREE.Vector3(), weight: 0, shake: 0, elbow: DEFAULT_ELBOW },
+    right: { point: new THREE.Vector3(), weight: 0, shake: 0, elbow: DEFAULT_ELBOW },
   };
   private readonly bodyScale: number;
   private clip: ActorFrame['clip'] = null;
@@ -153,8 +156,9 @@ export class Actor {
   }
 
   /** Alvo da mão (IK) no mundo; `weight` 0 = braço livre. */
-  setReach(hand: Hand, point: THREE.Vector3 | null, weight: number, shake = 0): void {
+  setReach(hand: Hand, point: THREE.Vector3 | null, weight: number, shake = 0, elbow?: Vec3 | null): void {
     const r = this.reach[hand];
+    r.elbow = elbow ?? DEFAULT_ELBOW;
     r.weight = point ? clamp01(weight) : 0;
     r.shake = shake;
     if (point) r.point.copy(point);
@@ -622,9 +626,8 @@ export class Actor {
       }
       const target = _v.copy(r.point);
       if (r.shake > 0) target.y += Math.sin(this.clock * Math.PI * 2 * 3.2) * 0.035 * r.shake;
-      // Cotovelo aponta para baixo, para trás e para fora.
       const side = hand === 'left' ? 1 : -1;
-      const pole = chain.upper.getWorldPosition(_v2).add(_pole.set(side * 0.35, -0.45, -0.6).applyQuaternion(this.root.quaternion));
+      const pole = chain.upper.getWorldPosition(_v2).add(_pole.set(side * r.elbow[0], r.elbow[1], r.elbow[2]).applyQuaternion(this.root.quaternion));
       solveTwoBoneIK(chain, target, pole, r.weight);
     }
   }

@@ -84,6 +84,7 @@ export const Interp = {
     blend: b.prev !== null ? t : b.blend,
     weight: lerp(a.weight, b.weight, t),
     shake: lerp(a.shake, b.shake, t),
+    elbow: b.elbow ?? a.elbow,
   })) as Interpolator<ReachFrame>,
   attach: ((_a, b, t) => ({ from: b.from, to: b.to, alpha: t })) as Interpolator<AttachValue>,
   step<V>(): Interpolator<V> {

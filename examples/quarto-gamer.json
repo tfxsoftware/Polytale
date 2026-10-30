@@ -3,7 +3,7 @@
   "meta": { "title": "Quarto Gamer", "author": "Polytale", "aspect": "9:16" },
   "fx": { "retro": true },
   "cast": {
-    "hero": { "kind": "actor", "name": "Hero", "color": "#ffd166", "model": "models/character-lowpoly.glb", "idleClip": "Idle" }
+    "hero": { "kind": "actor", "name": "Hero", "color": "#ffd166", "model": "models/characterv2-lowpoly.glb", "idleClip": "Idle" }
   },
   "cameras": [
     { "id": "corpo", "position": [-0.9, 0.75, 1.6], "lookAt": [0.35, 0.75, 1.5], "fov": 44 },
@@ -16,6 +16,8 @@
     { "id": "quarto_cama", "position": [0.7, 1.35, 0.55], "lookAt": [-0.7, 0.75, -1.5], "fov": 60 },
     { "id": "quarto_alto", "position": [-1.5, 2.6, 1.8], "lookAt": [0.4, 0.4, -0.5], "fov": 60 },
     { "id": "andar", "position": [-2.0, 1.4, 1.6], "lookAt": { "actor": "hero", "anchor": "chest" }, "fov": 46 },
+    { "id": "rosto_perto", "position": [-0.33, 1.45, -0.1], "lookAt": { "actor": "hero", "anchor": "head" }, "fov": 38 },
+    { "id": "rosto_colado", "position": [-0.33, 1.45, -0.3], "lookAt": { "actor": "hero", "anchor": "head" }, "fov": 38 },
     { "id": "lateral", "position": [-1.6, 1.0, 0.6], "lookAt": [-0.35, 0.95, -0.85], "fov": 48 },
     { "id": "frente", "position": [-0.1, 1.1, 0.85], "lookAt": [-0.35, 0.85, -0.85], "fov": 52 },
     { "id": "frente_perto", "position": [-0.25, 1.25, 0.25], "lookAt": [-0.35, 1.1, -0.85], "fov": 50 },
@@ -42,7 +44,7 @@
     { "time": 0, "type": "SPAWN_OBJECT", "target": "hero", "position": [0.35, 0, 1.5], "rotation": [0, -90, 0] },
     { "time": 0, "type": "CAMERA_CUT", "shot": "corpo" },
     { "time": 0, "type": "PLAY_ANIMATION", "target": "hero", "clip": "Smoking", "loop": false },
-    { "time": 1.4, "type": "SPAWN_OBJECT", "target": "cigarro", "object": { "kind": "prop", "prop": "cigarette", "cigarette": { "litAt": 6.7, "puffs": [8.0] } }, "position": [0.35, 1, 1.5] },
+    { "time": 1.4, "type": "SPAWN_OBJECT", "target": "cigarro", "object": { "kind": "prop", "prop": "cigarette", "cigarette": { "litAt": 6.7, "puffs": [8.0, 23.2] } }, "position": [0.35, 1, 1.5] },
     { "time": 1.4, "type": "ATTACH_OBJECT", "target": "cigarro", "to": "hero", "socket": "handR", "offset": [0.03, 0.085, 0.06], "rotation": [-90, 0, 0], "duration": 0 },
     { "time": 3.8, "type": "ATTACH_OBJECT", "target": "cigarro", "to": "hero", "socket": "head", "offset": [0.012, 0.012, 0.09], "rotation": [12, 0, 0], "duration": 0.15 },
     { "time": 5.6, "type": "SPAWN_OBJECT", "target": "isqueiro", "object": { "kind": "prop", "prop": "lighter", "lighter": { "flame": [6.05, 7.1] } }, "position": [0.35, 1, 1.5] },
@@ -68,16 +70,26 @@
     { "time": 19.7, "type": "TRANSFORM_OBJECT", "target": "hero", "rotation": [0, -178, 0], "duration": 0.25, "easing": "easeInOutQuad" },
     { "time": 19.7, "type": "TRANSFORM_OBJECT", "target": "hero", "position": [-0.35, 0, -0.45], "duration": 0.9, "easing": "linear" },
     { "time": 20.6, "type": "TRANSFORM_OBJECT", "target": "hero", "rotation": [0, 0, 0], "duration": 0.7, "easing": "easeInOutQuad" },
-    { "time": 21.05, "type": "PLAY_ANIMATION", "target": "hero", "clip": "Talking", "loop": true, "fade": 0.9 },
-    { "time": 21.05, "type": "TRANSFORM_OBJECT", "target": "hero", "position": [-0.35, 0.12, -0.85], "duration": 0.9, "easing": "easeInOutQuad" },
+    { "time": 21.05, "type": "PLAY_ANIMATION", "target": "hero", "clip": "Sitting", "loop": true, "fade": 0.9 },
+    { "time": 21.05, "type": "TRANSFORM_OBJECT", "target": "hero", "position": [-0.35, 0.12, -0.61], "duration": 0.9, "easing": "easeInOutQuad" },
 
     { "time": 22.2, "type": "CAMERA_CUT", "shot": "frente" },
-    { "time": 22.2, "type": "CAMERA_TRANSITION", "shot": "frente_perto", "duration": 2.3, "easing": "easeInOutSine" },
-    { "time": 24.7, "type": "CAMERA_CUT", "shot": "baixo" },
-    { "time": 27.2, "type": "CAMERA_CUT", "shot": "alto" },
-    { "time": 29.7, "type": "CAMERA_CUT", "shot": "perfil" },
-    { "time": 32.2, "type": "CAMERA_CUT", "shot": "lateral" },
-    { "time": 34.7, "type": "CAMERA_CUT", "shot": "ambiente" },
-    { "time": 37.2, "type": "FADE_SCREEN", "to": 1, "duration": 1.5 }
+    { "time": 22.5, "type": "REACH", "target": "hero", "hand": "right", "to": { "target": "hero", "part": "head", "offset": [-0.115, -0.14, 0.17], "local": true }, "elbow": [0.7, -0.7, 0.1], "duration": 0.7 },
+    { "time": 22.6, "type": "ATTACH_OBJECT", "target": "cigarro", "to": "hero", "socket": "handR", "offset": [0.06, 0.085, 0.06], "rotation": [0, -90, 0], "duration": 0.4 },
+    { "time": 24.2, "type": "REACH", "target": "hero", "hand": "right", "to": null, "duration": 0.7 },
+    { "time": 24.3, "type": "ATTACH_OBJECT", "target": "cigarro", "to": "hero", "socket": "handR", "offset": [0.03, 0.085, 0.06], "rotation": [-90, 0, 0], "duration": 0.4 },
+
+    { "time": 24.4, "type": "CAMERA_CUT", "shot": "rosto_perto" },
+    { "time": 24.4, "type": "CAMERA_TRANSITION", "shot": "rosto_colado", "duration": 3, "easing": "easeInOutSine" },
+
+    { "time": 27.4, "type": "PLAY_ANIMATION", "target": "hero", "clip": "Talking", "loop": true, "fade": 0.9 },
+    { "time": 27.4, "type": "TRANSFORM_OBJECT", "target": "hero", "position": [-0.35, 0.12, -0.85], "duration": 0.9, "easing": "easeInOutQuad" },
+
+    { "time": 29, "type": "CAMERA_CUT", "shot": "baixo" },
+    { "time": 31.5, "type": "CAMERA_CUT", "shot": "alto" },
+    { "time": 34, "type": "CAMERA_CUT", "shot": "perfil" },
+    { "time": 36.5, "type": "CAMERA_CUT", "shot": "lateral" },
+    { "time": 39, "type": "CAMERA_CUT", "shot": "ambiente" },
+    { "time": 41.5, "type": "FADE_SCREEN", "to": 1, "duration": 1.5 }
   ]
 }
