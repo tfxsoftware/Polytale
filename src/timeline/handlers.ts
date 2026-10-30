@@ -8,6 +8,7 @@ import {
   CAMERA_PRESETS,
   SOCKETS,
   DEFAULT_RETRO_SETTINGS,
+  VISUAL_STYLES,
   EXPRESSIONS,
   GESTURES,
   PROCEDURAL_SOUNDS,
@@ -35,6 +36,7 @@ import {
   type PlayAudioWithLipsyncEvent,
   type RGB,
   type RetroSettings,
+  type VisualStyle,
   type StoryEvent,
   type StoryScript,
   type Vec3,
@@ -899,6 +901,26 @@ export function createDefaultHandlers(): HandlerMap {
         }
         return t;
       },
+    },
+
+    SET_STYLE: {
+      defaultDuration: 0,
+      defaultEasing: 'linear',
+      validate(ev) {
+        return VISUAL_STYLES.includes(ev.style) ? [] : [`'style' deve ser um de: ${VISUAL_STYLES.join(', ')}`];
+      },
+      tracks: (ev) => [
+        track<VisualStyle>({
+          channel: 'fx:style',
+          get: (f) => f.fx.style,
+          set: (f, v) => {
+            f.fx.style = v;
+          },
+          interpolate: Interp.step<VisualStyle>(),
+          resolve: () => ev.style,
+          duration: 0,
+        }),
+      ],
     },
 
     SET_TIME_OF_DAY: {

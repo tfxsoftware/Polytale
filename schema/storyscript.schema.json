@@ -619,6 +619,10 @@
     "FxDef": {
       "type": "object",
       "properties": {
+        "style": {
+          "$ref": "#/definitions/VisualStyle",
+          "description": "Estilo visual. Padrão 'ps1'."
+        },
         "retro": {
           "type": "boolean"
         },
@@ -672,6 +676,15 @@
         }
       },
       "additionalProperties": false
+    },
+    "VisualStyle": {
+      "type": "string",
+      "enum": [
+        "ps1",
+        "pixel",
+        "halftone",
+        "toon"
+      ]
     },
     "ColorGrade": {
       "type": "string",
@@ -1169,6 +1182,9 @@
         },
         {
           "$ref": "#/definitions/SetRetroFxEvent"
+        },
+        {
+          "$ref": "#/definitions/SetStyleEvent"
         },
         {
           "$ref": "#/definitions/SetTimeOfDayEvent"
@@ -2284,6 +2300,40 @@
         "type"
       ],
       "additionalProperties": false
+    },
+    "SetStyleEvent": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "number",
+          "description": "Instante de início em segundos."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duração em segundos (0/omitido = ação instantânea)."
+        },
+        "easing": {
+          "$ref": "#/definitions/EasingName"
+        },
+        "label": {
+          "type": "string",
+          "description": "Rótulo opcional (para debug / mensagens de erro)."
+        },
+        "type": {
+          "type": "string",
+          "const": "SET_STYLE"
+        },
+        "style": {
+          "$ref": "#/definitions/VisualStyle"
+        }
+      },
+      "required": [
+        "style",
+        "time",
+        "type"
+      ],
+      "additionalProperties": false,
+      "description": "Troca o estilo visual (corte seco, sem transição)."
     },
     "SetTimeOfDayEvent": {
       "type": "object",

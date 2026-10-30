@@ -401,6 +401,7 @@ Campos comuns a **todos** os eventos:
 { "time": 0.1,  "type": "FADE_SCREEN", "to": 0, "duration": 2.5 }
 { "time": 11,   "type": "FLASH_SCREEN", "color": "#9ff7ff", "intensity": 0.9, "duration": 0.7 }
 { "time": 43.8, "type": "SET_RETRO_FX", "enabled": true, "settings": { "pixelSize": 6, "colorLevels": 16 }, "duration": 2 }
+{ "time": 30,   "type": "SET_STYLE", "style": "halftone" }
 { "time": 0,    "type": "PLAY_SOUND", "src": "procedural:wind", "loop": true, "volume": 0.45 }
 { "time": 0,    "type": "PLAY_SOUND", "src": "trilha.mp3", "bus": "music", "loop": true, "volume": 0.6 }
 ```
@@ -409,6 +410,11 @@ Campos comuns a **todos** os eventos:
 - `SET_RETRO_FX.settings`: `pixelSize` (1–8), `colorLevels` (32 = 15-bit PS1; 8–16 = mais "sujo"),
   `dither` (0–1), `scanlines` (0–1), `curvature` (0–0.3), `vignette` (0–1), `chromatic` (0–0.005),
   `noise` (0–0.1), `vertexSnap` (0–1).
+- `fx.style` (no topo do script ou por capítulo): `"ps1"` (padrão), `"pixel"` (pixel art com paleta de
+  16 cores e contorno), `"halftone"` (retícula de quadrinhos em CMYK com contorno) ou `"toon"` (sombras
+  em faixas e contorno preto). `SET_STYLE` troca o estilo no meio da história, em corte seco: use em
+  flashbacks e sonhos. `fx.retro` e `SET_RETRO_FX` só valem para `"ps1"`; `fx.grade`, `fx.dof`,
+  `fx.bloom`, `FADE_SCREEN` e `FLASH_SCREEN` funcionam em todos.
 - `PLAY_SOUND.src`: URL em `public/audio/` ou um som procedural: `procedural:wind`, `procedural:fire`,
   `procedural:thunder`, `procedural:chime`, `procedural:drip` (gota pingando, use com `loop`),
   `procedural:hum` (zumbido de lâmpada, `loop`), `procedural:water` (torneira), `procedural:switch`

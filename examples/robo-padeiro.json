@@ -1,0 +1,75 @@
+{
+  "$schema": "../schema/storyscript.schema.json",
+  "meta": { "title": "O Robô Padeiro", "author": "Polytale", "duration": 30, "aspect": "9:16" },
+  "subtitles": { "size": 1.15 },
+  "scene": {
+    "room": { "width": 5, "depth": 5, "height": 2.8, "floor": "tiles", "floorColor": "#f0d9b5", "wallColor": "#ffd6a5",
+              "windows": [ { "wall": "north", "offset": 1.2 } ] },
+    "lights": [
+      { "id": "amb", "type": "hemisphere", "color": "#fff6e5", "groundColor": "#c98f5a", "intensity": 1.3 },
+      { "id": "teto", "type": "point", "color": "#fff0d0", "intensity": 10, "position": [0, 2.4, 0.3], "distance": 10, "castShadow": true }
+    ],
+    "props": [
+      { "prop": "table", "position": [0, 0, -0.1] },
+      { "prop": "bookshelf", "position": [-1.8, 0, -2.25] },
+      { "prop": "crate", "position": [1.9, 0, -1.9], "scale": 0.8 },
+      { "prop": "rug", "position": [0, 0, 1.2], "color": "#e76f51" }
+    ]
+  },
+  "fx": { "style": "toon" },
+  "timeline": [
+    { "time": 0, "type": "FADE_SCREEN", "to": 1, "duration": 0 },
+    { "time": 0, "type": "FADE_SCREEN", "to": 0, "duration": 0.7 },
+
+    { "time": 0, "type": "SPAWN_OBJECT", "target": "biscoito",
+      "object": { "kind": "actor", "name": "Biscoito", "color": "#8ecae6", "height": 1.6, "build": "heavy", "headShape": "screen", "hair": "bald",
+        "accessories": ["scarf"], "palette": { "skin": "#cfd8dc", "shirt": "#ffffff", "pants": "#adb5bd", "accent": "#e63946" },
+        "subtitle": { "font": "monospace", "size": 0.9 },
+        "voice": { "engine": "babble", "pitch": 170, "timbre": 1.3 } },
+      "position": [0, 0, -0.75], "rotation": [0, 0, 0] },
+    { "time": 0, "type": "SPAWN_OBJECT", "target": "lia",
+      "object": { "kind": "actor", "name": "Lia", "color": "#ffb703", "height": 1.62, "build": "slim", "hair": "bun",
+        "palette": { "shirt": "#2a9d8f", "pants": "#264653", "hair": "#3a2416" },
+        "voice": { "engine": "speech", "lang": "pt-BR", "rate": 1.1, "pitch": 1.25 } },
+      "position": [0, 0, 0.55], "rotation": [0, 180, 0] },
+    { "time": 0, "type": "SPAWN_OBJECT", "target": "xicara", "object": { "kind": "prop", "prop": "cup", "color": "#ffffff" },
+      "position": [-0.35, 0.8, -0.2] },
+
+    { "time": 0, "type": "SET_LOOK_TARGET", "target": "biscoito", "lookAt": "lia" },
+    { "time": 0, "type": "SET_LOOK_TARGET", "target": "lia", "lookAt": "biscoito" },
+    { "time": 0, "type": "CAMERA_CUT", "preset": "close_up", "subject": "lia", "side": "left" },
+
+    { "time": 0.5, "type": "SET_EXPRESSION", "target": "lia", "expression": "happy", "intensity": 0.7 },
+    { "time": 0.6, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "lia", "text": "Bom dia! Um café, por favor." },
+
+    { "time": 3.3, "type": "CAMERA_CUT", "preset": "close_up", "subject": "biscoito", "side": "right" },
+    { "time": 3.4, "type": "SET_EXPRESSION", "target": "biscoito", "expression": "thinking" },
+    { "time": 3.5, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "biscoito", "text": "Café não encontrado. Deseja atualizar?" },
+
+    { "time": 6.9, "type": "CAMERA_CUT", "preset": "close_up", "subject": "lia", "side": "left" },
+    { "time": 6.9, "type": "SET_EXPRESSION", "target": "lia", "expression": "neutral" },
+    { "time": 7, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "lia", "text": "Atualizar o café?" },
+
+    { "time": 8.8, "type": "CAMERA_CUT", "preset": "close_up", "subject": "biscoito", "side": "right" },
+    { "time": 8.8, "type": "SET_EXPRESSION", "target": "biscoito", "expression": "happy" },
+    { "time": 8.9, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "biscoito", "text": "Atualizando. Por favor, não desligue a padaria." },
+
+    { "time": 13, "type": "CAMERA_CUT", "preset": "over_shoulder", "subject": "biscoito", "over": "lia" },
+    { "time": 13.1, "type": "SET_LOOK_TARGET", "target": "biscoito", "lookAt": "xicara" },
+    { "time": 13.2, "type": "INTERACT", "target": "biscoito", "interaction": "pickUp", "with": "xicara" },
+    { "time": 16.6, "type": "SET_LOOK_TARGET", "target": "biscoito", "lookAt": "lia" },
+    { "time": 16.7, "type": "INTERACT", "target": "biscoito", "interaction": "give", "with": "lia", "object": "xicara", "approach": false },
+
+    { "time": 19.4, "type": "CAMERA_CUT", "preset": "close_up", "subject": "lia", "side": "left" },
+    { "time": 19.5, "type": "SET_LOOK_TARGET", "target": "lia", "lookAt": "xicara" },
+    { "time": 19.6, "type": "REACH", "target": "lia", "hand": "right", "to": { "target": "lia", "part": "head", "offset": [0, -0.12, 0.2], "local": true }, "duration": 0.5, "hold": 1.2 },
+    { "time": 20.8, "type": "SET_EXPRESSION", "target": "lia", "expression": "surprised", "duration": 0.2 },
+    { "time": 21.3, "type": "SET_LOOK_TARGET", "target": "lia", "lookAt": "biscoito" },
+    { "time": 21.5, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "lia", "text": "Isso aqui é sopa!" },
+
+    { "time": 23.4, "type": "CAMERA_CUT", "preset": "close_up", "subject": "biscoito", "side": "right" },
+    { "time": 23.5, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "biscoito", "text": "Versão nova. Agora com mais colher." },
+    { "time": 26.6, "type": "PLAY_GESTURE", "target": "biscoito", "gesture": "nod" },
+    { "time": 27.6, "type": "FADE_SCREEN", "to": 1, "duration": 1.8 }
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "$schema": "../schema/storyscript.schema.json",
+  "meta": { "title": "A Relíquia", "author": "Polytale", "duration": 33 },
+  "scene": {
+    "timeOfDay": 18.4,
+    "ground": { "color": "#5a7a3f", "color2": "#527238", "tiles": 48 },
+    "lights": [
+      { "id": "brilho", "type": "point", "color": "#7fe8ff", "intensity": 3, "position": [0, 1, -2], "distance": 7, "flicker": 0.15 }
+    ],
+    "props": [
+      { "prop": "pillar", "position": [-2.2, 0, -2.8] },
+      { "prop": "pillar", "position": [2.2, 0, -2.8] },
+      { "prop": "pillar", "position": [-3.4, 0, -0.6], "scale": 0.8 },
+      { "prop": "pillar", "position": [3.4, 0, -0.6], "scale": 0.8 },
+      { "prop": "rock", "position": [0.5, 0, -2.5], "scale": 0.7 },
+      { "prop": "rock", "position": [-5, 0, 3], "scale": 1.1 },
+      { "prop": "pine", "position": [-8, 0, -7], "scale": 1.6 },
+      { "prop": "pine", "position": [-4, 0, -9], "scale": 1.3 },
+      { "prop": "pine", "position": [5, 0, -8], "scale": 1.5 },
+      { "prop": "pine", "position": [9, 0, -5], "scale": 1.7 },
+      { "prop": "particles", "particles": { "preset": "sparks", "count": 24 }, "position": [0, 0.1, -2], "color": "#7fe8ff" }
+    ]
+  },
+  "fx": { "style": "pixel" },
+  "cameras": [
+    { "id": "abertura", "position": [0, 2.6, 10], "lookAt": [0, 1, -1], "fov": 46 }
+  ],
+  "timeline": [
+    { "time": 0, "type": "FADE_SCREEN", "to": 1, "duration": 0 },
+    { "time": 0.1, "type": "FADE_SCREEN", "to": 0, "duration": 1.5 },
+    { "time": 0, "type": "PLAY_SOUND", "src": "procedural:wind", "loop": true, "volume": 0.3 },
+
+    { "time": 0, "type": "SPAWN_OBJECT", "target": "nina",
+      "object": { "kind": "actor", "name": "Nina", "color": "#ffd166", "height": 1.65, "build": "athletic", "hair": "ponytail",
+        "accessories": ["cap", "backpack"], "palette": { "shirt": "#d1495b", "pants": "#2f3a56", "hair": "#6b3a1e", "accent": "#edae49" },
+        "voice": { "engine": "babble", "pitch": 240, "timbre": 1.1 } },
+      "position": [-6, 0, 2.5], "rotation": [0, 110, 0] },
+    { "time": 0, "type": "SPAWN_OBJECT", "target": "sabio",
+      "object": { "kind": "actor", "name": "Sábio", "color": "#a8d8ff", "height": 1.75, "outfit": "robe", "hair": "bald",
+        "accessories": ["wizardHat", "beard"], "palette": { "shirt": "#3b5dc9", "hair": "#e8e8e8", "accent": "#29366f" },
+        "voice": { "engine": "babble", "pitch": 110, "timbre": 0.9 } },
+      "position": [1.6, 0, 0.2], "rotation": [0, -105, 0] },
+    { "time": 0, "type": "SPAWN_OBJECT", "target": "reliquia", "object": { "kind": "prop", "prop": "orb", "color": "#7fe8ff" },
+      "position": [0, 0.09, -2] },
+
+    { "time": 0, "type": "CAMERA_CUT", "shot": "abertura" },
+    { "time": 0, "type": "SET_LOOK_TARGET", "target": "sabio", "lookAt": "nina" },
+    { "time": 0.4, "type": "TRANSFORM_OBJECT", "target": "nina", "position": [-1.5, 0, 1], "duration": 3.6, "easing": "linear" },
+
+    { "time": 4.4, "type": "CAMERA_CUT", "preset": "close_up", "subject": "sabio", "side": "right" },
+    { "time": 4.4, "type": "SET_LOOK_TARGET", "target": "nina", "lookAt": "sabio" },
+    { "time": 4.5, "type": "SET_POSE", "target": "sabio", "pose": "armsCrossed", "duration": 0.6 },
+    { "time": 4.6, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "sabio", "text": "Alto lá, viajante. Ninguém chega tão longe." },
+
+    { "time": 8.3, "type": "CAMERA_CUT", "preset": "close_up", "subject": "nina", "side": "left" },
+    { "time": 8.3, "type": "SET_EXPRESSION", "target": "nina", "expression": "happy", "intensity": 0.6 },
+    { "time": 8.4, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "nina", "text": "Só vim buscar a relíquia." },
+
+    { "time": 10.8, "type": "CAMERA_CUT", "preset": "medium", "subject": "sabio", "side": "right" },
+    { "time": 10.9, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "sabio", "text": "Muitos vieram. Todos fugiram do mesmo desafio." },
+
+    { "time": 14.9, "type": "CAMERA_CUT", "preset": "close_up", "subject": "nina", "side": "left" },
+    { "time": 14.9, "type": "SET_EXPRESSION", "target": "nina", "expression": "thinking" },
+    { "time": 15, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "nina", "text": "Que desafio?" },
+
+    { "time": 16.8, "type": "CAMERA_CUT", "preset": "close_up", "subject": "sabio", "side": "right" },
+    { "time": 16.9, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "sabio", "text": "Apertar o botão de pegar." },
+
+    { "time": 19.4, "type": "CAMERA_CUT", "preset": "two_shot", "subject": "nina", "over": "sabio" },
+    { "time": 19.4, "type": "SET_EXPRESSION", "target": "nina", "expression": "neutral" },
+    { "time": 20, "type": "PLAY_GESTURE", "target": "nina", "gesture": "shrug" },
+    { "time": 21.4, "type": "CAMERA_CUT", "preset": "wide" },
+    { "time": 21.4, "type": "SET_LOOK_TARGET", "target": "nina", "lookAt": "reliquia" },
+    { "time": 21.4, "type": "INTERACT", "target": "nina", "interaction": "pickUp", "with": "reliquia" },
+
+    { "time": 25.8, "type": "FLASH_SCREEN", "color": "#7fe8ff", "intensity": 0.8, "duration": 0.6 },
+    { "time": 25.8, "type": "PLAY_SOUND", "src": "procedural:chime", "volume": 0.6 },
+    { "time": 25.8, "type": "SET_LIGHT", "target": "brilho", "intensity": 9, "duration": 0.3 },
+    { "time": 25.9, "type": "SET_POSE", "target": "nina", "pose": "armsUp", "duration": 0.4 },
+    { "time": 26, "type": "SET_EXPRESSION", "target": "nina", "expression": "happy", "intensity": 1.2 },
+    { "time": 26.2, "type": "SHOW_TITLE", "title": "FASE CONCLUÍDA", "subtitle": "+1 relíquia", "duration": 2.6, "overlay": true },
+
+    { "time": 28.4, "type": "CAMERA_CUT", "preset": "close_up", "subject": "sabio", "side": "right" },
+    { "time": 28.5, "type": "SET_EXPRESSION", "target": "sabio", "expression": "sad", "intensity": 0.6 },
+    { "time": 28.6, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "sabio", "text": "Trezentos anos de espera." },
+    { "time": 31, "type": "FADE_SCREEN", "to": 1, "duration": 1.8 }
+  ]
+}

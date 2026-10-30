@@ -335,6 +335,7 @@ export class ActionRegistry {
       camera: { kind: 'shot', spec: shots.size ? { shot: shots.keys().next().value as string } : { preset: 'wide' }, start: 0 },
       shakes: [],
       fx: {
+        style: script.fx?.style ?? 'ps1',
         retro: script.fx?.retro ?? true,
         settings: { ...DEFAULT_RETRO_SETTINGS, ...(script.fx?.settings ?? {}) },
         grade: script.fx?.grade ?? 'none',

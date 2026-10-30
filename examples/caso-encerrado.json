@@ -1,0 +1,95 @@
+{
+  "$schema": "../schema/storyscript.schema.json",
+  "meta": { "title": "Caso Encerrado", "author": "Polytale", "duration": 36 },
+  "subtitles": { "style": "plain", "font": "Georgia" },
+  "scene": {
+    "room": { "width": 6, "depth": 5.4, "height": 2.8, "floor": "wood", "floorColor": "#6d6d6d", "wallColor": "#bdbdbd",
+              "doors": [ { "wall": "south", "offset": 0 } ], "windows": [ { "wall": "east", "offset": 0 } ] },
+    "lights": [
+      { "id": "amb", "type": "hemisphere", "color": "#d6d6d6", "groundColor": "#303030", "intensity": 0.7 },
+      { "id": "persiana", "type": "spot", "color": "#ffffff", "intensity": 34, "position": [2.8, 2.5, 0.2], "target": [-0.6, 0.9, -0.5],
+        "angle": 42, "cookie": "blinds", "castShadow": true },
+      { "id": "abajur", "type": "point", "color": "#fff2d8", "intensity": 3, "position": [-0.7, 1.15, -0.8], "distance": 4, "flicker": 0.06 }
+    ],
+    "props": [
+      { "prop": "table", "position": [0, 0, -0.7] },
+      { "prop": "chair", "position": [0, 0, -1.45] },
+      { "prop": "bookshelf", "position": [-1.8, 0, -2.3] },
+      { "prop": "bookshelf", "position": [1.8, 0, -2.3] },
+      { "prop": "candle", "position": [-0.45, 0.78, -0.8] },
+      { "prop": "particles", "particles": { "preset": "smoke", "count": 14 }, "position": [0.4, 0.85, -0.8] }
+    ]
+  },
+  "fx": { "style": "halftone", "grade": "noir" },
+  "cameras": [
+    { "id": "abertura", "position": [-2.3, 1.7, 2.2], "lookAt": [0.1, 0.9, -0.8], "fov": 52 },
+    { "id": "mesa", "position": [-0.9, 1.25, 0.1], "lookAt": [0.05, 0.82, -0.65], "fov": 40, "handheld": 0.15 }
+  ],
+  "timeline": [
+    { "time": 0, "type": "FADE_SCREEN", "to": 1, "duration": 0 },
+    { "time": 0.1, "type": "FADE_SCREEN", "to": 0, "duration": 1.8 },
+    { "time": 0, "type": "PLAY_SOUND", "src": "procedural:hum", "loop": true, "volume": 0.2 },
+
+    { "time": 0, "type": "SPAWN_OBJECT", "target": "vera",
+      "object": { "kind": "actor", "name": "Vera", "color": "#ffffff", "height": 1.7, "build": "slim", "hair": "long",
+        "accessories": ["hat"], "palette": { "shirt": "#4a4a4a", "pants": "#2a2a2a", "hair": "#1a1a1a", "accent": "#303030" },
+        "voice": { "engine": "speech", "lang": "pt-BR", "rate": 0.95, "pitch": 0.85 } },
+      "position": [0, 0, -1.45], "rotation": [0, 0, 0] },
+    { "time": 0, "type": "SPAWN_OBJECT", "target": "otavio",
+      "object": { "kind": "actor", "name": "Otávio", "color": "#cfcfcf", "height": 1.78, "build": "heavy", "hair": "short",
+        "accessories": ["mustache", "scarf"], "palette": { "shirt": "#8a8a8a", "pants": "#3e3e3e", "hair": "#444444", "accent": "#d0d0d0" },
+        "voice": { "engine": "speech", "lang": "pt-BR", "rate": 1.08, "pitch": 1.1 } },
+      "position": [0, 0, 2.2], "rotation": [0, 180, 0] },
+    { "time": 0, "type": "SPAWN_OBJECT", "target": "diario", "object": { "kind": "prop", "prop": "book", "color": "#303030" },
+      "position": [0, 1, 2] },
+    { "time": 0, "type": "ATTACH_OBJECT", "target": "diario", "to": "otavio", "socket": "handL", "duration": 0 },
+
+    { "time": 0, "type": "SET_POSE", "target": "vera", "pose": "sit", "seatHeight": 0.47, "duration": 0 },
+    { "time": 0, "type": "SET_LOOK_TARGET", "target": "vera", "lookAt": "otavio" },
+    { "time": 0, "type": "SET_LOOK_TARGET", "target": "otavio", "lookAt": "vera" },
+    { "time": 0, "type": "CAMERA_CUT", "shot": "abertura" },
+
+    { "time": 0.8, "type": "PLAY_SOUND", "src": "procedural:door", "volume": 0.5 },
+    { "time": 1, "type": "TRANSFORM_OBJECT", "target": "otavio", "position": [0, 0, 0.55], "duration": 1.9, "easing": "linear" },
+
+    { "time": 3.2, "type": "CAMERA_CUT", "preset": "close_up", "subject": "otavio", "side": "right" },
+    { "time": 3.3, "type": "SET_EXPRESSION", "target": "otavio", "expression": "sad" },
+    { "time": 3.4, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "otavio", "text": "Detetive, alguém roubou o meu diário." },
+
+    { "time": 6.8, "type": "CAMERA_CUT", "preset": "close_up", "subject": "vera", "side": "left" },
+    { "time": 6.9, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "vera", "text": "Quando?" },
+
+    { "time": 8.5, "type": "CAMERA_CUT", "preset": "close_up", "subject": "otavio", "side": "right" },
+    { "time": 8.6, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "otavio", "text": "Ontem à noite. E ninguém mais tinha a chave da gaveta." },
+
+    { "time": 13, "type": "CAMERA_CUT", "preset": "close_up", "subject": "vera", "side": "left" },
+    { "time": 13, "type": "SET_EXPRESSION", "target": "vera", "expression": "thinking" },
+    { "time": 13.1, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "vera", "text": "Ninguém?" },
+
+    { "time": 14.8, "type": "CAMERA_CUT", "preset": "close_up", "subject": "otavio", "side": "right" },
+    { "time": 14.9, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "otavio", "text": "Só eu, detetive. É uma tragédia." },
+
+    { "time": 18, "type": "CAMERA_CUT", "preset": "close_up", "subject": "vera", "side": "left" },
+    { "time": 18.1, "type": "SET_LOOK_TARGET", "target": "vera", "lookAt": "diario" },
+    { "time": 18.3, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "vera", "text": "E o que é isso na sua mão?" },
+
+    { "time": 20.8, "type": "CAMERA_TRANSITION", "preset": "close_up", "subject": "diario", "duration": 1.2, "easing": "easeInOutCubic" },
+    { "time": 21, "type": "SET_LOOK_TARGET", "target": "otavio", "lookAt": "diario" },
+
+    { "time": 23, "type": "CAMERA_CUT", "preset": "close_up", "subject": "otavio", "side": "right" },
+    { "time": 23, "type": "SET_EXPRESSION", "target": "otavio", "expression": "surprised", "duration": 0.2 },
+    { "time": 23.4, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "otavio", "text": "Isso explica muita coisa." },
+
+    { "time": 26, "type": "DETACH_OBJECT", "target": "diario", "position": [0, 0.8, -0.45], "duration": 0.5 },
+    { "time": 26, "type": "CAMERA_CUT", "shot": "mesa" },
+
+    { "time": 27.6, "type": "CAMERA_CUT", "preset": "close_up", "subject": "vera", "side": "left" },
+    { "time": 27.6, "type": "SET_LOOK_TARGET", "target": "vera", "lookAt": "otavio" },
+    { "time": 27.7, "type": "SET_EXPRESSION", "target": "vera", "expression": "happy", "intensity": 0.4 },
+    { "time": 27.8, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "vera", "text": "São quinhentos a consulta." },
+
+    { "time": 30.4, "type": "CAMERA_CUT", "shot": "abertura" },
+    { "time": 30.6, "type": "SHOW_TITLE", "title": "CASO ENCERRADO", "duration": 3, "overlay": true },
+    { "time": 33.2, "type": "FADE_SCREEN", "to": 1, "duration": 2 }
+  ]
+}

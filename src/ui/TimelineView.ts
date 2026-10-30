@@ -29,6 +29,7 @@ const CATEGORY: Record<StoryEvent['type'], Category> = {
   INTERACT: 'body',
   PLAY_ANIMATION: 'body',
   SET_RETRO_FX: 'fx',
+  SET_STYLE: 'fx',
   SET_TIME_OF_DAY: 'fx',
   FADE_SCREEN: 'fx',
   FLASH_SCREEN: 'fx',

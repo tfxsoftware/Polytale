@@ -3,7 +3,7 @@ import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { PROCEDURAL_RIG, type ActorObjectDef, type Hand, type Joint, type Socket } from '../timeline/types';
 import { addAccessories, addHair, addOutfit, buildProportions, createHeadGeometry } from './CharacterStyle';
-import { applyPS1VertexSnap } from '../systems/PostProcessing';
+import { applyStyleShader } from '../systems/PostProcessing';
 import { createMouthGeometry, createEyelidGeometry, createBrowGeometry } from './ActorFace';
 import type { AssetLoader } from './AssetLoader';
 
@@ -88,7 +88,7 @@ function socket(parent: THREE.Object3D, name: string, x: number, y: number, z: n
 
 function lambert(color: THREE.ColorRepresentation): THREE.MeshLambertMaterial {
   const m = new THREE.MeshLambertMaterial({ color, flatShading: true });
-  applyPS1VertexSnap(m);
+  applyStyleShader(m);
   return m;
 }
 
@@ -101,7 +101,7 @@ function faceMaterial(color: THREE.ColorRepresentation, offset: number): THREE.M
     polygonOffsetFactor: -offset,
     polygonOffsetUnits: -offset,
   });
-  applyPS1VertexSnap(m);
+  applyStyleShader(m);
   return m;
 }
 
@@ -390,7 +390,7 @@ export function buildGltfRig(gltf: GLTF): GltfRig {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-    mats.forEach((m) => applyPS1VertexSnap(m));
+    mats.forEach((m) => applyStyleShader(m));
   });
   body.add(model);
 

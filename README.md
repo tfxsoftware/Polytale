@@ -130,8 +130,12 @@ characters — see section 3.7 of `skills.md`.
 
 | File | Shows |
 |---|---|
+| `a-reliquia.json` | `fx.style: "pixel"` at sunset: an RPG joke with `babble` voices, `SHOW_TITLE` and `pickUp` |
+| `caso-encerrado.json` | `fx.style: "halftone"` with `grade: "noir"`: a comic-book detective scene with a blinds `cookie` |
 | `encontro-no-parque.json` | `INTERACT` (high five, pick up, give, hug, sit) and speech-bubble subtitles |
+| `o-fliperama.json` | `SET_STYLE` flashbacks that cut between `toon` and `pixel` in one continuous timeline |
 | `o-mapa.json` | `chapters` + `cast`, sunset with `SET_TIME_OF_DAY`, an interior `room` with furniture |
+| `robo-padeiro.json` | `fx.style: "toon"` in vertical 9:16: a screen-faced robot, `pickUp` + `give` |
 | `the-last-original-part.json` | A 3:40 single-scene 9:16 dialogue using nearly everything: `autoCamera` with `cutaway`, a live CCTV `screen`, `dots`/`crt` effects, `backdrop`, blinds `cookie`, `dof`/`bloom`/`grade`, particles, a screen-faced robot, `faceTexture`/`outfitTexture`, chunk captions and a watermark |
 | `tempestade.json` | Lightning (`SET_LIGHT` + flash + shake + thunder), `SET_RETRO_FX`, a custom gesture, `babble` voice |
 | `ultimo-cafe.json` | Vertical 9:16 video (`meta.aspect`) for Reels/TikTok: close-ups, `pickUp` + `give`, an interior `room` |
@@ -153,7 +157,7 @@ your file) to a script to get autocomplete and inline errors in VS Code and othe
 | Camera | `CAMERA_CUT`, `CAMERA_TRANSITION`, `CAMERA_SHAKE` |
 | Acting | `SET_LOOK_TARGET`, `SET_EXPRESSION`, `PLAY_GESTURE`, `PLAY_ANIMATION` |
 | Body | `SET_POSE`, `REACH`, `ATTACH_OBJECT`, `DETACH_OBJECT`, `INTERACT` |
-| Light & effects | `SET_LIGHT`, `SET_TIME_OF_DAY`, `SET_RETRO_FX`, `FADE_SCREEN`, `FLASH_SCREEN`, `SHOW_TITLE` |
+| Light & effects | `SET_LIGHT`, `SET_TIME_OF_DAY`, `SET_RETRO_FX`, `SET_STYLE`, `FADE_SCREEN`, `FLASH_SCREEN`, `SHOW_TITLE` |
 
 Subtitles are styled in the **⚙ OPÇÕES** panel (`O`), which writes an optional top-level `subtitles` block (`style: "box" | "plain" | "outline"`,
 `position: "bottom" | "top" | "center" | "speaker"` (speech bubble that follows the speaker's head), `margin`, `showName`,

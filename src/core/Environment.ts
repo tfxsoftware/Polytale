@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { PropType, RoomDef, WallOpening, WallSide } from '../timeline/types';
-import { applyPS1VertexSnap } from '../systems/PostProcessing';
+import { applyStyleShader } from '../systems/PostProcessing';
 import { clamp01, hashString, lerp, seededRandom, smoothstep } from '../utils/math';
 
 /**
@@ -10,7 +10,7 @@ import { clamp01, hashString, lerp, seededRandom, smoothstep } from '../utils/ma
 
 function lambert(color: THREE.ColorRepresentation, map?: THREE.Texture, side: THREE.Side = THREE.FrontSide): THREE.MeshLambertMaterial {
   const m = new THREE.MeshLambertMaterial({ color, flatShading: true, map: map ?? null, side });
-  applyPS1VertexSnap(m);
+  applyStyleShader(m);
   return m;
 }
 

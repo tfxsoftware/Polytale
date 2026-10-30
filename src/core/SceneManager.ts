@@ -19,7 +19,7 @@ import { isVideoSrc } from '../timeline/types';
 import type { AssetLoader } from './AssetLoader';
 import type { ActorProvider, CameraDirector } from '../systems/CameraDirector';
 import type { LipsyncState } from '../systems/AudioLipsync';
-import { applyPS1VertexSnap } from '../systems/PostProcessing';
+import { applyStyleShader } from '../systems/PostProcessing';
 import { Actor } from './Actor';
 import { DayNightCycle, buildFurniture, buildRoom } from './Environment';
 import { DEG2RAD, fbm1D, hashString, lerp, seededRandom } from '../utils/math';
@@ -39,13 +39,13 @@ interface SpawnedProp {
 
 function lambert(color: THREE.ColorRepresentation, map?: THREE.Texture): THREE.MeshLambertMaterial {
   const m = new THREE.MeshLambertMaterial({ color, flatShading: true, map: map ?? null });
-  applyPS1VertexSnap(m);
+  applyStyleShader(m);
   return m;
 }
 
 function emissive(color: THREE.ColorRepresentation): THREE.MeshBasicMaterial {
   const m = new THREE.MeshBasicMaterial({ color });
-  applyPS1VertexSnap(m);
+  applyStyleShader(m);
   return m;
 }
 
@@ -967,7 +967,7 @@ export class SceneManager implements ActorProvider {
           const mesh = o as THREE.Mesh;
           if (!mesh.isMesh) return;
           const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-          mats.forEach((m) => applyPS1VertexSnap(m));
+          mats.forEach((m) => applyStyleShader(m));
         });
         break;
       }

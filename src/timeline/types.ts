@@ -487,6 +487,10 @@ export interface RetroSettings {
 export const COLOR_GRADES = ['none', 'warm', 'cool', 'noir'] as const;
 export type ColorGrade = (typeof COLOR_GRADES)[number];
 
+/** Estilo visual da imagem final. Só 'ps1' usa `retro` e `settings`. */
+export const VISUAL_STYLES = ['ps1', 'pixel', 'halftone', 'toon'] as const;
+export type VisualStyle = (typeof VISUAL_STYLES)[number];
+
 /** Desfoque de profundidade (bokeh). Independente do retro FX. */
 export interface DofDef {
   /** Abertura: quanto maior, mais forte o desfoque fora de foco. Padrão 0.025. */
@@ -506,6 +510,8 @@ export interface BloomDef {
 }
 
 export interface FxDef {
+  /** Estilo visual. Padrão 'ps1'. */
+  style?: VisualStyle;
   retro?: boolean;
   settings?: Partial<RetroSettings>;
   /** Correção de cor independente do retro FX (também funciona com ele desligado). Padrão 'none'. */
@@ -705,6 +711,12 @@ export interface SetRetroFxEvent extends EventBase {
   settings?: Partial<RetroSettings>;
 }
 
+/** Troca o estilo visual (corte seco, sem transição). */
+export interface SetStyleEvent extends EventBase {
+  type: 'SET_STYLE';
+  style: VisualStyle;
+}
+
 export interface SetTimeOfDayEvent extends EventBase {
   type: 'SET_TIME_OF_DAY';
   /** Hora alvo (0–24). O tempo sempre avança (de 22 para 2 passa pela meia-noite). */
@@ -766,6 +778,7 @@ export type StoryEvent =
   | InteractEvent
   | PlayAnimationEvent
   | SetRetroFxEvent
+  | SetStyleEvent
   | SetTimeOfDayEvent
   | FadeScreenEvent
   | FlashScreenEvent
@@ -1024,6 +1037,7 @@ export interface ResolvedBloom {
 }
 
 export interface FxFrame {
+  style: VisualStyle;
   retro: boolean;
   settings: RetroSettings;
   grade: ColorGrade;

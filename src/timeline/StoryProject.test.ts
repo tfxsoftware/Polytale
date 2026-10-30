@@ -103,6 +103,21 @@ describe('validação', () => {
     expect(errors).toContain(`'subtitles.margin' deve ser um número >= 0`);
   });
 
+  it('troca o estilo visual em corte seco e volta ao seguir para trás', () => {
+    const project = compileProject(registry, {
+      meta: { title: 'x', duration: 10 },
+      fx: { style: 'pixel' },
+      timeline: [{ time: 5, type: 'SET_STYLE', style: 'toon' }],
+    });
+    const styleAt = (t: number) => evaluateProject(registry, project, t).frame.fx.style;
+    expect([styleAt(4.9), styleAt(5), styleAt(9), styleAt(4.9)]).toEqual(['pixel', 'toon', 'toon', 'pixel']);
+  });
+
+  it('recusa um estilo visual desconhecido', () => {
+    const errors = compileErrors(registry, { meta: { title: 'x' }, timeline: [{ time: 0, type: 'SET_STYLE', style: 'nope' }] });
+    expect(errors.some((e) => e.includes(`'style' deve ser um de`))).toBe(true);
+  });
+
   it('valida o formato do quadro', () => {
     for (const aspect of ['16:9', '9:16', '1:1']) {
       expect(compileErrors(registry, { meta: { title: 'x', aspect }, timeline: [] })).toEqual([]);
