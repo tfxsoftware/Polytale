@@ -199,7 +199,9 @@ export type PropType =
   | 'cup'
   | 'model'
   | 'particles'
-  | 'screen';
+  | 'screen'
+  | 'cigarette'
+  | 'lighter';
 
 export const PARTICLE_PRESETS = ['steam', 'smoke', 'dust', 'sparks'] as const;
 export type ParticlePreset = (typeof PARTICLE_PRESETS)[number];
@@ -237,6 +239,20 @@ export interface ScreenDef {
   bezel?: boolean;
 }
 
+/** Apenas para prop = 'cigarette'. Tempos da história (s): tudo é reversível no seek. */
+export interface CigaretteDef {
+  /** Quando acende. Sem isso fica apagado. */
+  litAt?: number;
+  /** Início de cada tragada: a brasa aviva e a fumaça sai pela boca de quem o segura logo depois. */
+  puffs?: number[];
+}
+
+/** Apenas para prop = 'lighter'. */
+export interface LighterDef {
+  /** Início e fim da chama (s). Sem isso fica apagado. */
+  flame?: [number, number];
+}
+
 export interface PropDef {
   prop: PropType;
   color?: string;
@@ -244,6 +260,8 @@ export interface PropDef {
   model?: string;
   particles?: ParticlesDef;
   screen?: ScreenDef;
+  cigarette?: CigaretteDef;
+  lighter?: LighterDef;
 }
 
 /** Cenografia estática (não endereçável pela timeline). */
@@ -285,7 +303,8 @@ export interface SceneDef {
   backdrop?: string;
   sky?: SkyDef;
   fog?: FogDef;
-  ground?: GroundDef;
+  /** `false` remove o chão padrão (cenário que já traz o próprio piso, como um GLB). */
+  ground?: GroundDef | false;
   lights?: LightDef[];
   props?: StaticPropDef[];
   room?: RoomDef;

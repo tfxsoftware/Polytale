@@ -98,7 +98,9 @@ expressões, gestos, olhares e efeitos — sempre a serviço da clareza da hist�
 ### 3.3 Props (cenografia)
 
 `prop`: `tree`, `pine`, `rock`, `crate`, `campfire`, `pillar`, `lamp`, `stool` (banco, assento a 0,45 m),
-`orb` (orbe luminoso), `book`, `cup`, `model` (GLTF via `"model": "models/arquivo.glb"`), `particles`, `screen`.
+`orb` (orbe luminoso), `book`, `cup`, `model` (GLTF via `"model": "models/arquivo.glb"`), `particles`, `screen`, `cigarette`, `lighter`.
+
+`cigarette`: `cigarette: { "litAt": 6.7, "puffs": [8.1] }` (acende em `litAt`; em cada tragada a brasa aviva e a fumaça sai pela boca de quem o segura). Origem no filtro, ponta acesa em +Z local. `lighter`: `lighter: { "flame": [6, 7] }` (chama e luz nesse intervalo). Origem na base, chama em +Y local. Prenda os dois com `ATTACH_OBJECT`; para o cigarro na boca use `socket: "head"`.
 
 Objetos **manipuláveis** (pegar, entregar, largar) devem ser props pequenos (`orb`, `book`, `cup`) criados por
 `SPAWN_OBJECT`. A origem de `orb`/`book`/`cup` é o centro do objeto: no chão use `y` ≈ 0,09 (orb), 0,02 (book), 0,05 (cup);
@@ -162,6 +164,7 @@ Dê a cada personagem uma silhueta própria (cabelo + acessório + cor). A capa 
   câmeras **dentro** do cômodo (a ≥ 0,4 m das paredes).
 - Interiores não têm sol: declare `lights` (hemisphere suave + 1 point no teto com sombra, ± `spot` entrando pela janela).
 - Sem `ground` explícito não há chão externo; use `background` escuro.
+- Cenário pronto em GLB (`prop: "model"`, sem `room`): use `"ground": false`, senão o chão verde padrão cobre o piso do modelo. Reduza modelos gerados por IA com `node scripts/build-background.mjs entrada.glb saida.glb`, que coloca a origem no centro da base; a altura do piso precisa ser compensada em `position[1]`.
 
 ### 3.6 Ciclo dia/noite (`scene.timeOfDay`)
 

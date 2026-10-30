@@ -258,7 +258,16 @@
           "$ref": "#/definitions/FogDef"
         },
         "ground": {
-          "$ref": "#/definitions/GroundDef"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/GroundDef"
+            },
+            {
+              "type": "boolean",
+              "const": false
+            }
+          ],
+          "description": "`false` remove o chão padrão (cenário que já traz o próprio piso, como um GLB)."
         },
         "lights": {
           "type": "array",
@@ -429,6 +438,12 @@
         "screen": {
           "$ref": "#/definitions/ScreenDef"
         },
+        "cigarette": {
+          "$ref": "#/definitions/CigaretteDef"
+        },
+        "lighter": {
+          "$ref": "#/definitions/LighterDef"
+        },
         "position": {
           "$ref": "#/definitions/Vec3"
         },
@@ -470,7 +485,9 @@
         "cup",
         "model",
         "particles",
-        "screen"
+        "screen",
+        "cigarette",
+        "lighter"
       ]
     },
     "ParticlesDef": {
@@ -538,6 +555,40 @@
         "dots",
         "crt"
       ]
+    },
+    "CigaretteDef": {
+      "type": "object",
+      "properties": {
+        "litAt": {
+          "type": "number",
+          "description": "Quando acende. Sem isso fica apagado."
+        },
+        "puffs": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "description": "Início de cada tragada: a brasa aviva e a fumaça sai pela boca de quem o segura logo depois."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Apenas para prop = 'cigarette'. Tempos da história (s): tudo é reversível no seek."
+    },
+    "LighterDef": {
+      "type": "object",
+      "properties": {
+        "flame": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "Início e fim da chama (s). Sem isso fica apagado."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Apenas para prop = 'lighter'."
     },
     "RoomDef": {
       "type": "object",
@@ -1115,6 +1166,12 @@
         },
         "screen": {
           "$ref": "#/definitions/ScreenDef"
+        },
+        "cigarette": {
+          "$ref": "#/definitions/CigaretteDef"
+        },
+        "lighter": {
+          "$ref": "#/definitions/LighterDef"
         },
         "kind": {
           "type": "string",

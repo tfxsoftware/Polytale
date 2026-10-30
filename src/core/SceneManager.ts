@@ -229,6 +229,12 @@ const PARTICLE_SPECS: Record<ParticlePreset, ParticleSpec> = {
   sparks: { count: 16, color: '#ffb23f', size: 0.045, height: 0.9, spread: 0.3, period: 1.1, drift: 2, additive: true },
 };
 
+/** Tragada: a brasa aviva por DRAG_TIME e a fumaça começa a sair EXHALE_DELAY depois do início. */
+const DRAG_TIME = 0.9;
+const EXHALE_DELAY = 0.7;
+const EXHALE_SPAN = 1.1;
+const EXHALE_LIFE = 2.6;
+
 /** Textura de disco suave compartilhada por todos os sistemas de partículas. */
 let particleTexture: THREE.CanvasTexture | null = null;
 function softDiscTexture(): THREE.CanvasTexture {
@@ -257,6 +263,8 @@ export class SceneManager implements ActorProvider {
   private readonly props = new Map<string, SpawnedProp>();
   private readonly lights = new Map<string, SceneLight>();
   private readonly animated: Animated[] = [];
+  /** Quadro atual: animações que precisam do tempo da história depois dos encaixes (ver `update`). */
+  private frame: FrameState | null = null;
   /** Animações puras de `frame.time` (ex.: partículas) — diferente de `animated` (tempo real), ficam reversíveis no seek. */
   private readonly frameAnimated: Animated[] = [];
   /** Vídeos de tela (prop 'screen'): acompanham o relógio da história em `syncScreenVideos`. */
@@ -518,6 +526,7 @@ export class SceneManager implements ActorProvider {
   ): void {
     this.elapsed += deltaTime;
     const t = this.elapsed;
+    this.frame = frame;
 
     for (const sl of this.lights.values()) {
       const base = (sl.light.userData.baseIntensity as number | undefined) ?? sl.def.intensity ?? 1;
@@ -662,8 +671,8 @@ export class SceneManager implements ActorProvider {
       this.world.add(this.createSky(def.sky));
     }
     if (def.room) this.world.add(buildRoom(def.room));
-    // Em interiores o chão externo só aparece se for pedido (ex.: visto pela porta).
-    if (!def.room || def.ground) this.world.add(this.createGround(def.ground ?? { color: '#3d5a32', color2: '#35502b' }));
+    // Em interiores o chão externo só aparece se for pedido (ex.: visto pela porta); `false` o desliga de vez.
+    if (def.ground !== false && (!def.room || def.ground)) this.world.add(this.createGround(def.ground ?? { color: '#3d5a32', color2: '#35502b' }));
   }
 
   private createSky(sky: SkyDef): THREE.Mesh {
@@ -781,6 +790,116 @@ export class SceneManager implements ActorProvider {
   /* ---------------------------------------------------------------------- */
   /*  Props procedurais                                                     */
   /* ---------------------------------------------------------------------- */
+
+  /** Sprites de fumaça soltos no mundo: a fumaça sobe na vertical mesmo com o cigarro girando na mão. */
+  private smokeSprites(count: number, color: string): THREE.Sprite[] {
+    return Array.from({ length: count }, () => {
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: softDiscTexture(), color, transparent: true, depthWrite: false, opacity: 0 }));
+      sprite.castShadow = false;
+      this.world.add(sprite);
+      return sprite;
+    });
+  }
+
+  /** Origem no filtro, ponta acesa em +Z. */
+  private buildCigarette(g: THREE.Group, def: PropDef, seed: number): void {
+    const radius = 0.0055;
+    const filter = 0.025;
+    const paper = 0.07;
+    const tipLength = 0.006;
+    const stick = (length: number, start: number, material: THREE.Material) =>
+      new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, 6).rotateX(Math.PI / 2).translate(0, 0, start + length / 2), material);
+    g.add(stick(filter, 0, lambert('#c98a4b')), stick(paper, filter, lambert(def.color ?? '#f0ece2')));
+
+    const tipEnd = filter + paper + tipLength;
+    const tipMaterial = emissive('#6d6a64');
+    g.add(stick(tipLength, filter + paper, tipMaterial));
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: softDiscTexture(), color: '#ff6a1f', transparent: true, depthWrite: false, opacity: 0, blending: THREE.AdditiveBlending }));
+    glow.position.z = tipEnd;
+    g.add(glow);
+
+    const litAt = def.cigarette?.litAt ?? Infinity;
+    const puffs = def.cigarette?.puffs ?? [];
+    const ash = new THREE.Color('#6d6a64');
+    const ember = new THREE.Color('#ff5a14');
+    const stream = this.smokeSprites(26, '#b9bcc4');
+    const exhale = this.smokeSprites(34, '#c4c7ce');
+    const rand = seededRandom(seed);
+    const phase = stream.map(() => rand());
+    const noise = seed % 1000;
+    const tip = new THREE.Vector3();
+    const mouth = new THREE.Vector3();
+    const forward = new THREE.Vector3();
+    const headQuat = new THREE.Quaternion();
+
+    this.animated.push(() => {
+      const frame = this.frame;
+      const t = frame?.time ?? 0;
+      const entry = [...this.props].find(([, p]) => p.object === g);
+      const obj = entry && frame?.objects[entry[0]];
+      const on = !!obj?.visible && t >= litAt;
+      const drag = Math.max(0, ...puffs.map((p) => (t >= p && t <= p + DRAG_TIME ? Math.sin((Math.PI * (t - p)) / DRAG_TIME) : 0)));
+      const heat = on ? Math.min(1, (t - litAt) / 0.4) * (0.55 + 0.45 * drag + fbm1D(t * 5, noise) * 0.08) : 0;
+      tipMaterial.color.lerpColors(ash, ember, heat);
+      (glow.material as THREE.SpriteMaterial).opacity = heat * 0.75;
+      glow.scale.setScalar(0.022 + 0.03 * heat);
+
+      g.updateWorldMatrix(true, false);
+      tip.set(0, 0, tipEnd).applyMatrix4(g.matrixWorld);
+      const rise = on ? Math.min(1, (t - litAt) / 1.2) : 0;
+      stream.forEach((sprite, i) => {
+        const u = (t / 2.4 + i / stream.length + phase[i] * 0.04) % 1;
+        sprite.visible = rise > 0;
+        sprite.position.set(tip.x + fbm1D(t * 0.5, noise + i * 13) * 0.08 * u, tip.y + u * 0.42, tip.z + fbm1D(t * 0.5 + 50, noise + i * 13) * 0.08 * u);
+        sprite.scale.setScalar(lerp(0.012, 0.075, u));
+        (sprite.material as THREE.SpriteMaterial).opacity = 0.15 * rise * Math.sin(Math.PI * u);
+      });
+
+      const holder = obj?.attach.to ? this.actors.get(obj.attach.to.actor) : undefined;
+      const start = puffs.filter((p) => t >= p + EXHALE_DELAY).at(-1);
+      const puffing = !!holder && !!obj?.visible && start !== undefined;
+      if (holder) {
+        // Mesmo encaixe do cigarro nos lábios: o centro da cabeça não fica na frente do rosto.
+        holder.getSocketWorld('head', mouth, headQuat);
+        forward.set(0, 0, 1).applyQuaternion(headQuat);
+        mouth.addScaledVector(forward, 0.11);
+      }
+      exhale.forEach((sprite, i) => {
+        const age = puffing ? t - start! - EXHALE_DELAY - (i / exhale.length) * EXHALE_SPAN : -1;
+        sprite.visible = age >= 0 && age <= EXHALE_LIFE;
+        if (!sprite.visible) return;
+        const u = age / EXHALE_LIFE;
+        const reach = 0.3 * (1 - (1 - u) ** 2);
+        sprite.position.copy(mouth).addScaledVector(forward, reach);
+        sprite.position.x += fbm1D(i * 0.4, noise) * 0.2 * u;
+        sprite.position.y += u * 0.42;
+        sprite.position.z += fbm1D(i * 0.4 + 50, noise) * 0.2 * u;
+        sprite.scale.setScalar(lerp(0.03, 0.27, u));
+        (sprite.material as THREE.SpriteMaterial).opacity = 0.2 * (1 - u) * Math.min(1, age / 0.15);
+      });
+    });
+  }
+
+  /** Corpo em pé, chama em +Y. */
+  private buildLighter(g: THREE.Group, def: PropDef, seed: number): void {
+    g.add(new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.05, 0.01).translate(0, 0.025, 0), lambert(def.color ?? '#b5322a')));
+    g.add(new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.009, 0.01).translate(0, 0.0545, 0), lambert('#b9bcc4')));
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.008, 0.032, 4).translate(0, 0.016, 0), emissive('#ffcf6a'));
+    flame.position.y = 0.059;
+    flame.castShadow = false;
+    g.add(flame);
+    const light = this.followLight(new THREE.PointLight('#ffb35a', 0, 2.2, 1.6), g, new THREE.Vector3(0, 0.08, 0));
+    const [from, to] = def.lighter?.flame ?? [Infinity, Infinity];
+    const noise = seed % 1000;
+    this.animated.push(() => {
+      const t = this.frame?.time ?? 0;
+      const on = g.visible && t >= from && t < to;
+      const n = fbm1D(t * 11, noise);
+      flame.visible = on;
+      flame.scale.set(1, 1 + n * 0.4, 1);
+      light.userData.baseIntensity = on ? 0.4 * (1 + n * 0.3) : 0;
+    });
+  }
 
   private createProp(def: PropDef, assets: AssetLoader, seed: number): THREE.Object3D {
     const rand = seededRandom(seed);
@@ -975,6 +1094,12 @@ export class SceneManager implements ActorProvider {
         });
         break;
       }
+      case 'cigarette':
+        this.buildCigarette(g, def, seed);
+        break;
+      case 'lighter':
+        this.buildLighter(g, def, seed);
+        break;
       case 'particles': {
         const spec = PARTICLE_SPECS[def.particles?.preset ?? 'steam'];
         const count = Math.max(1, Math.min(64, def.particles?.count ?? spec.count));

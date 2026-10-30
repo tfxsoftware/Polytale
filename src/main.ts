@@ -368,21 +368,22 @@ async function exportVideo(): Promise<void> {
 
 /**
  * O MediaRecorder grava em tempo real e o áudio não dá para corrigir depois, então a primeira
- * passagem serve de medição: se ficou longe do alvo, a história toca de novo com o ganho certo.
+ * passagem serve de medição e a história toca de novo com o ganho certo. A segunda acontece mesmo
+ * sem correção de volume: a primeira gravação da sessão perde vários segundos de quadros no começo.
  */
 function restartExportWithGain(gain: number): void {
   exportNormalized = true;
   timeline.seek(0);
   recorder.start(30, gain);
   timeline.play();
-  exportOverlay.show('⬇ Ajustando o volume (2ª passagem)…');
+  exportOverlay.show('⬇ Gravando o vídeo final (2ª passagem)…');
 }
 
 async function finishExport(save: boolean): Promise<void> {
   if (!recorder.recording) return;
   timeline.pause();
   const blob = await recorder.stop();
-  const gain = save && !exportNormalized ? makeupGain(recorder.measuredLUFS) : null;
+  const gain = save && !exportNormalized ? (makeupGain(recorder.measuredLUFS) ?? 1) : null;
   if (gain !== null) {
     restartExportWithGain(gain);
     return;
