@@ -67,7 +67,9 @@ export interface GltfRig extends RigCommon {
   headBone: THREE.Object3D | null;
   neckBone: THREE.Object3D | null;
   spineBone: THREE.Object3D | null;
-  /** Rotação de repouso dos ossos manipulados (reaplicada a cada quadro antes do mixer). */
+  /** Altura de repouso do osso da coluna (a respiração oscila em torno dela). */
+  spineRestY: number;
+  /** Rotação base dos ossos manipulados: última saída do mixer, reaplicada a cada quadro antes dele. */
   rest: Map<THREE.Object3D, THREE.Quaternion>;
 }
 
@@ -468,6 +470,7 @@ export function buildGltfRig(gltf: GLTF): GltfRig {
     headBone,
     neckBone,
     spineBone,
+    spineRestY: spineBone?.position.y ?? 0,
     headCenter,
     chestCenter,
     joints,

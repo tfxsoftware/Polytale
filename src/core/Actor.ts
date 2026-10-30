@@ -488,10 +488,12 @@ export class Actor {
   }
 
   private updateGltfBody(rig: GltfRig, dt: number): void {
-    // Ossos voltam ao repouso antes do mixer: camadas aditivas não acumulam entre quadros.
+    // Ossos voltam à base antes do mixer: camadas aditivas não acumulam entre quadros.
     for (const [bone, q] of rig.rest) bone.quaternion.copy(q);
     rig.body.position.y = 0;
     this.updateMixer(rig, dt);
+    // O mixer só escreve valores que mudaram: com o clipe parado, a base guarda a pose dele.
+    for (const [bone, q] of rig.rest) q.copy(bone.quaternion);
     const t = this.clock;
     const expr = this.expressionPose();
     const breath = Math.sin((t * Math.PI * 2) / this.breathPeriod);
@@ -499,7 +501,7 @@ export class Actor {
     if (rig.spineBone) {
       _q.setFromEuler(_e.set(breath * -0.015 + expr.slump * 0.1, 0, 0));
       rig.spineBone.quaternion.multiply(_q);
-      rig.spineBone.position.y += breath * 0.002;
+      rig.spineBone.position.y = rig.spineRestY + breath * 0.002;
     }
 
     let targetYaw = fbm1D(t * 0.15, (this.seed % 29) + 3) * 0.15;

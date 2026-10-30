@@ -1,0 +1,36 @@
+{
+  "$schema": "../schema/storyscript.schema.json",
+  "meta": { "title": "Teste de Personagem", "author": "Polytale" },
+  "fx": { "retro": true },
+  "cast": {
+    "hero": { "kind": "actor", "name": "Hero", "color": "#ffd166", "model": "models/character-lowpoly.glb", "idleClip": "Idle",
+      "voice": { "engine": "speech", "lang": "pt-BR" } }
+  },
+  "chapters": [
+    {
+      "title": "Teste",
+      "scene": {
+        "timeOfDay": 12,
+        "ground": { "color": "#7a8a5a", "color2": "#72825a", "tiles": 72 },
+        "props": [ { "prop": "tree", "position": [5, 0, -4] }, { "prop": "rock", "position": [-4, 0, -3] } ]
+      },
+      "timeline": [
+        { "time": 0, "type": "SPAWN_OBJECT", "target": "hero", "position": [0, 0, 0], "rotation": [0, 0, 0] },
+        { "time": 0, "type": "CAMERA_CUT", "preset": "medium", "subject": "hero" },
+
+        { "time": 3, "type": "CAMERA_CUT", "preset": "wide" },
+        { "time": 3, "type": "TRANSFORM_OBJECT", "target": "hero", "position": [-5, 0, 2], "rotation": [0, 90, 0], "duration": 0.01 },
+        { "time": 3, "type": "PLAY_ANIMATION", "target": "hero", "clip": "Walking", "loop": true, "fade": 0.2 },
+        { "time": 3.1, "type": "TRANSFORM_OBJECT", "target": "hero", "position": [1, 0, 2], "duration": 3.7, "easing": "linear" },
+
+        { "time": 6.8, "type": "PLAY_ANIMATION", "target": "hero", "clip": "Idle", "loop": true, "fade": 0.3 },
+        { "time": 7, "type": "TRANSFORM_OBJECT", "target": "hero", "rotation": [0, 0, 0], "duration": 0.4 },
+
+        { "time": 8, "type": "CAMERA_CUT", "preset": "medium", "subject": "hero" },
+        { "time": 8, "type": "PLAY_ANIMATION", "target": "hero", "clip": "Talking", "loop": true, "fade": 0.3 },
+        { "time": 8.2, "type": "PLAY_AUDIO_WITH_LIPSYNC", "target": "hero", "text": "Esse é o teste do personagem low poly." },
+        { "time": 13, "type": "PLAY_ANIMATION", "target": "hero", "clip": "Idle", "loop": true, "fade": 0.3 }
+      ]
+    }
+  ]
+}
