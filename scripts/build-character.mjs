@@ -8,6 +8,7 @@
  * Reduz a malha, descarta normais (o GLTFLoader passa a usar flat shading), troca o PBR por
  * uma única textura pequena sem filtragem e copia as trilhas dos FBX para o esqueleto do GLB.
  * Os clipes precisam vir de um esqueleto com os mesmos nomes de ossos. Requer ffmpeg no PATH.
+ * O corpo ganha um morph `jawOpen` e uma malha escura de boca: o avatar não tem morphs nem boca aberta.
  */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -34,6 +35,9 @@ const DEFAULT_TARGET = { tris: 500, texture: 128 };
 /** Pele a menos disso sob a roupa é removida: com pouca geometria ela atravessaria o tecido. */
 const COVER_DISTANCE = 0.08;
 const MAX_INFLUENCES = 4;
+/** Boca do avatar Avaturn na pose de repouso (m). */
+const MOUTH = { lipLine: 1.652, chin: 1.598, halfWidth: 0.05, front: 0.03, drop: 0.024, center: 1.642, openHeight: 0.024, z: 0.0935, width: 0.023 };
+const MOUTH_SEGMENTS = 10;
 
 const GL = { BYTE: 5120, UBYTE: 5121, SHORT: 5122, USHORT: 5123, UINT: 5125, FLOAT: 5126, NEAREST: 9728 };
 const COMPONENTS = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
@@ -187,6 +191,42 @@ function compact(mesh, indices) {
   return { ...mesh, indices: remapped, positions: take(mesh.positions, 3), uvs: take(mesh.uvs, 2), joints: take(mesh.joints, 4), weights: take(mesh.weights, 4) };
 }
 
+/** Abre a boca: o lábio inferior e o queixo descem, sumindo em direção aos cantos e ao pescoço. */
+function jawOpenDeltas(positions) {
+  const deltas = new Float32Array(positions.length);
+  for (let v = 0; v < positions.length / 3; v++) {
+    const [x, y, z] = positions.subarray(v * 3, v * 3 + 3);
+    if (y > MOUTH.lipLine || y < MOUTH.chin || z < MOUTH.front || Math.abs(x) > MOUTH.halfWidth) continue;
+    const across = 1 - (x / MOUTH.halfWidth) ** 2;
+    deltas[v * 3 + 1] = -MOUTH.drop * across;
+    deltas[v * 3 + 2] = -0.004 * across;
+  }
+  return deltas;
+}
+
+/** Elipse escura entre os lábios, achatada em repouso (invisível) e aberta pelo morph. */
+function mouthMesh(head) {
+  const count = MOUTH_SEGMENTS + 1;
+  const positions = new Float32Array(count * 3);
+  const deltas = new Float32Array(count * 3);
+  positions.set([0, MOUTH.center, MOUTH.z]);
+  for (let i = 0; i < MOUTH_SEGMENTS; i++) {
+    const a = (i / MOUTH_SEGMENTS) * Math.PI * 2;
+    const x = Math.cos(a) * MOUTH.width;
+    positions.set([x, MOUTH.center, MOUTH.z - 40 * x * x], (i + 1) * 3);
+    deltas[(i + 1) * 3 + 1] = (Math.sin(a) * MOUTH.openHeight) / 2;
+  }
+  const indices = new Uint32Array(MOUTH_SEGMENTS * 3);
+  for (let i = 0; i < MOUTH_SEGMENTS; i++) indices.set([0, i + 1, ((i + 1) % MOUTH_SEGMENTS) + 1], i * 3);
+  const joints = new Uint16Array(count * 4);
+  const weights = new Float32Array(count * 4);
+  for (let v = 0; v < count; v++) {
+    joints[v * 4] = head;
+    weights[v * 4] = 1;
+  }
+  return { positions, deltas, indices, joints, weights };
+}
+
 function shrinkTexture(bytes, size) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'polytale-texture-'));
   const source = path.join(dir, 'in');
@@ -282,6 +322,8 @@ function buildLowPoly() {
     };
   });
 
+  const jaw = (deltas) => ({ targets: [{ POSITION: writer.accessor(deltas, 'VEC3', true) }] });
+  const jawMesh = { weights: [0], extras: { targetNames: ['jawOpen'] } };
   const outMeshes = reduced.map((m, i) => ({
     name: m.name,
     primitives: [
@@ -294,14 +336,39 @@ function buildLowPoly() {
           JOINTS_0: writer.accessor(m.joints, 'VEC4'),
           WEIGHTS_0: writer.accessor(m.weights, 'VEC4'),
         },
+        ...(/body/.test(m.name) ? jaw(jawOpenDeltas(m.positions)) : {}),
       },
     ],
+    ...(/body/.test(m.name) ? jawMesh : {}),
   }));
+
+  const mouth = mouthMesh(json.skins[0].joints.findIndex((node) => json.nodes[node].name === 'Head'));
+  materials.push({ name: 'mouth', pbrMetallicRoughness: { baseColorFactor: [0.09, 0.02, 0.02, 1], metallicFactor: 0, roughnessFactor: 1 }, doubleSided: true });
+  outMeshes.push({
+    name: 'mouth',
+    primitives: [
+      {
+        material: materials.length - 1,
+        indices: writer.accessor(mouth.indices, 'SCALAR'),
+        attributes: {
+          POSITION: writer.accessor(mouth.positions, 'VEC3', true),
+          JOINTS_0: writer.accessor(mouth.joints, 'VEC4'),
+          WEIGHTS_0: writer.accessor(mouth.weights, 'VEC4'),
+        },
+        ...jaw(mouth.deltas),
+      },
+    ],
+    ...jawMesh,
+  });
+  const nodes = [...json.nodes, { name: 'mouth', mesh: outMeshes.length - 1, skin: 0 }];
+  const scenes = json.scenes.map((scene, i) => (i === (json.scene ?? 0) ? { ...scene, nodes: [...scene.nodes, nodes.length - 1] } : scene));
 
   const skins = json.skins.map((s) => ({ ...s, inverseBindMatrices: writer.accessor(readAccessor(glb, s.inverseBindMatrices), 'MAT4') }));
 
   return {
     meshes: outMeshes,
+    nodes,
+    scenes,
     skins: json.skins.map((s) => ({ ...s, inverseBindMatrices: writer.accessor(readAccessor(glb, s.inverseBindMatrices), 'MAT4') })),
     materials,
     textures,
