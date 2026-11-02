@@ -6,7 +6,8 @@ lip-synced dialogue with subtitles, camera direction, physical interactions betw
 and a retro shader with pixelation, dithering and scanlines.
 
 Built with **Vite + TypeScript + Three.js**. It needs no external assets: characters, scenery,
-voices and sounds can all be procedural.
+voices and sounds can all be procedural. Some examples use models and audio that live outside git:
+run `npm run assets` to download them into `public/`.
 
 ---
 
@@ -323,6 +324,10 @@ To type new actions, add the event to the `StoryEvent` union in `src/timeline/ty
   The file's real duration is used on the timeline.
 - A missing asset doesn't break the story: the engine falls back to procedural content and shows a
   notice in the panel.
+- **Example assets:** `public/` is gitignored. `npm run assets` downloads the example files from a
+  GitHub release without touching local files (`npm run assets -- --force` replaces them). When
+  they change, publish a new `assets-vN` release and update `ASSETS_TAG` in
+  `scripts/fetch-assets.mjs`.
 
 ---
 
